@@ -20,4 +20,4 @@ Run the script with:
     python download-aura-photos.py
 
 
-Photos will be downloaded to the `images/` folder in this repository.
+Photos will be downloaded to the `images/` folder.
