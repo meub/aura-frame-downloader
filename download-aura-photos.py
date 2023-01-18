@@ -6,7 +6,7 @@ import os
 import os.path
 import re
 
-# Put Aura email/password and download location file path here
+# Put Aura email/password here
 email = "youremail@email.com"
 password =  "yourpassword"
 file_path = "images/"
@@ -19,9 +19,9 @@ frame_id = "your-frame-id"
 # Main download function
 def download_photos_from_aura( email, password, frame_id):
 
-  # URLs and payload format
+  # define URLs and payload format
   login_url = "https://api.pushd.com/v5/login.json"
-  frame_url = "https://api.pushd.com/v5/frames/" + frame_id + "/assets.json?limit=10000&side_load_users=false"
+  frame_url = "https://api.pushd.com/v5/frames/" + frame_id + "/assets.json?limit=1000&side_load_users=false"
   login_payload = {
       "identifier_for_vendor": "does-not-matter",
       "client_device_id": "does-not-matter",
@@ -33,10 +33,7 @@ def download_photos_from_aura( email, password, frame_id):
       }
   }
 
-  if not os.path.isdir( file_path ):
-    os.path.mkdir( file_path )
-
-  # Make log in request with credentials
+  # make login request with credentials
   s = requests.Session()
   r = s.post(login_url, json=login_payload)
 
@@ -46,11 +43,11 @@ def download_photos_from_aura( email, password, frame_id):
 
   print("Login Success")
 
-  # Get json and update user and auth token headers for next request
+  # get json and update user and auth token headers for next request
   json_data = r.json()
   s.headers.update({'X-User-Id': json_data['result']['current_user']['id'],  'X-Token-Auth':  json_data['result']['current_user']['auth_token'] })
 
-  # Make request to get all phtos (frame assets)
+  # make request to get all phtos (frame assets)
   r = s.get(frame_url)
   json_data = json.loads(r.text)
   counter = 1

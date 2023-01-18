@@ -14,7 +14,7 @@ You can get your frame ID by doing the following:
  * Click on "View Photos" underneath your frame
  * Then grab the ID from the URL: `https://app.auraframes.com/frame/<FRAME ID HERE>`.
 
-You can also optionally specify your desired download path for the images or leave it as the default and it will create an images folder in the same directory as the script.
+Photos will be downloaded to the `images/` folder in this repository
 
 Run the script with:
 
