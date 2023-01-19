@@ -20,4 +20,4 @@ Run the script with:
     python download-aura-photos.py
 
 
-Photos will be downloaded to the `images/` folder.
+Photos will be downloaded to the `images/` folder. The Aura API will throttle the downloads so you may have to restart the script multiple times to fully download all of your photos. The good thing is that download progress is saved so photos that are already downloaded will be skipped when restarting the script. You can also adjust the `time.sleep(2)` to something longer if throttling becomes a problem.

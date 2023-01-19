@@ -21,7 +21,7 @@ def download_photos_from_aura( email, password, frame_id):
 
   # define URLs and payload format
   login_url = "https://api.pushd.com/v5/login.json"
-  frame_url = "https://api.pushd.com/v5/frames/" + frame_id + "/assets.json?limit=1000&side_load_users=false"
+  frame_url = "https://api.pushd.com/v5/frames/" + frame_id + "/assets.json?side_load_users=false"
   login_payload = {
       "identifier_for_vendor": "does-not-matter",
       "client_device_id": "does-not-matter",
@@ -38,8 +38,8 @@ def download_photos_from_aura( email, password, frame_id):
   r = s.post(login_url, json=login_payload)
 
   if r.status_code != 200:
-    print("Login Error")
-    return
+    print("Login Error: Check your credentials")
+    return 0
 
   print("Login Success")
 
@@ -51,6 +51,15 @@ def download_photos_from_aura( email, password, frame_id):
   r = s.get(frame_url)
   json_data = json.loads(r.text)
   counter = 1
+
+  # check to make sure the frame assets array exists
+  if( "assets" not in json_data ):
+    print("Download Error: No images returned from this Aura Frame. API responded with:")
+    print(json_data)
+    return 0
+
+  photo_count = len(json_data["assets"])
+  print( "Found", photo_count, "photos, starting download process")
 
   for item in json_data["assets"]:
 
