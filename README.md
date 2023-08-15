@@ -20,4 +20,15 @@ Run the script with:
     python download-aura-photos.py
 
 
-Photos will be downloaded to the `images/` folder. The Aura API will throttle the downloads so you may have to restart the script multiple times to fully download all of your photos. The good thing is that download progress is saved so photos that are already downloaded will be skipped when restarting the script. You can also adjust the `time.sleep(2)` to something longer if throttling becomes a problem.
+Photos will be downloaded to the `images/` folder. The Aura API will throttle the downloads 
+so you may have to restart the script multiple times to fully download all of your photos. 
+The good thing is that download progress is saved so photos that are already downloaded 
+will be skipped when restarting the script. You can also adjust the `time.sleep(2)` 
+to something longer if throttling becomes a problem.
+
+The script creates the local picture file name using the 'taken_at' (timestamp) and 
+'file_name' (a uuid and extension) from the item JSON data, so it should be unique 
+for every picture on the frame. 
+Example file name: 2012-04-15-03-15-04.000_B9A0E367-FA8D-4157-A090-7EE33F603312.jpeg
+This will naturally sort the pictures by the date and time taken on most operating 
+systems when you list them.
