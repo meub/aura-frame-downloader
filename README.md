@@ -26,9 +26,13 @@ The good thing is that download progress is saved so photos that are already dow
 will be skipped when restarting the script. You can also adjust the `time.sleep(2)` 
 to something longer if throttling becomes a problem.
 
-The script creates the local picture file name using the 'taken_at' (timestamp) and 
-'file_name' (a uuid and extension) from the item JSON data, so it should be unique 
-for every picture on the frame. 
+The script creates the local picture file name using the following attributes from the 
+item JSON data
+- 'taken_at' (a timestamp) 
+- 'id' (a unique identifier in the Aura frame)
+- 'file_name' (the extension only) 
+
 Example file name: 2012-04-15-03-15-04.000_B9A0E367-FA8D-4157-A090-7EE33F603312.jpeg
+
 This will naturally sort the pictures by the date and time taken on most operating 
 systems when you list them.
