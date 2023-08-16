@@ -17,7 +17,6 @@ file_path = "images"
 # Then grab the ID from the URL: https://app.auraframes.com/frame/<FRAME ID HERE>
 frame_id = "your-frame-id"
 
-
 # Main download function
 def download_photos_from_aura(email, password, frame_id):
     # define URLs and payload format
@@ -71,9 +70,9 @@ def download_photos_from_aura(email, password, frame_id):
             # construct the raw photo URL
             url = f"https://imgproxy.pushd.com/{item['user_id']}/{item['file_name']}"
 
-            # construct new_filename from the taken_at timestamp + photo UUID and extension
-            # construct file_to_write us os.path.join() to handle path delimiters
-            new_filename = re.sub(':|T', '-', item["taken_at"]).replace('Z', '') + "_" + item['file_name']
+            # make a unique new_filename using
+            #  item['taken_at'] + item['id'] + item['file_name']'s extension
+            new_filename = item['taken_at'] + "_" + item['id'] + os.path.splitext(item['file_name'])[1]
             file_to_write = os.path.join(file_path, new_filename)
 
             # Bump the counter and print the new_filename out to track progress
