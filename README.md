@@ -27,12 +27,15 @@ will be skipped when restarting the script. You can also adjust the `time.sleep(
 to something longer if throttling becomes a problem.
 
 The script creates the local picture file name using the following attributes from the 
-item JSON data
+item JSON data.
 - 'taken_at' (a timestamp) 
 - 'id' (a unique identifier in the Aura frame)
 - 'file_name' (the extension only) 
 
 Example file name: 2012-04-15-03-15-04.000_B9A0E367-FA8D-4157-A090-7EE33F603312.jpeg
 
-This will naturally sort the pictures by the date and time taken on most operating 
-systems when you list them.
+Note: It's possible for the same picture file to be uploaded to an Aura
+frame by different people.  This will result in each picture being downloaded
+to a separate filename under images/.  If there are a lot of people updating
+a frame, you may want to run a duplicate photo finder on the downloaded 
+photos.
