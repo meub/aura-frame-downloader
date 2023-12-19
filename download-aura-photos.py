@@ -69,10 +69,11 @@ def download_photos_from_aura(email, password, frame_id):
         try:
             # construct the raw photo URL
             url = f"https://imgproxy.pushd.com/{item['user_id']}/{item['file_name']}"
-
             # make a unique new_filename using
             #  item['taken_at'] + item['id'] + item['file_name']'s extension
-            new_filename = item['taken_at'] + "_" + item['id'] + os.path.splitext(item['file_name'])[1]
+            # But clean the timestamp to be Windows-friendly
+            clean_time = item['taken_at'].replace(':', '-')
+            new_filename = clean_time + "_" + item['id'] + os.path.splitext(item['file_name'])[1]
             file_to_write = os.path.join(file_path, new_filename)
 
             # Bump the counter and print the new_filename out to track progress
