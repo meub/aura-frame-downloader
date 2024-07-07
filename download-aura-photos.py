@@ -20,7 +20,7 @@ def parse_command_line():
     parser.add_argument(
         "--config",
         help="configuration file",
-        default=os.path.join(os.path.expanduser('~'),'etc','aura','credentials.ini'),
+        default=os.path.join('etc','credentials.ini'),
         required=False,
     )
 
@@ -161,10 +161,9 @@ def app():
     if not aok:
         sys.exit(1)
 
-    
-
     try :
         # Read the frame and login credentials from outside the repo
+        LOGGER.info("Using credentials file '%s'", args.config)
         config = configparser.ConfigParser()
         config.read(args.config)
 
@@ -180,7 +179,7 @@ def app():
     # or the file_path is changed.
     if not os.path.isdir(file_path):
         LOGGER.info("Creating new images directory: %s", file_path)
-        os.mkdir(file_path)
+        os.makedirs(file_path)
 
     total = download_photos_from_aura(email, password, frame_id, file_path)
     LOGGER.info("Downloaded %i photos", total)

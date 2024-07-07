@@ -14,7 +14,7 @@ They can be overridded using the --config /path/to/config.ini command line optio
 Windows: %USERPROFILE%/etc/aura/credentials.ini
 Linux  : $HOME/etc/aura/credentials.ini
 
-Example credentials.ini file
+Example file, found under etc/credentials.ini
 ---------------------------------------------------------------
 # Credentials to log into api.auraframes.com
 [login]
@@ -33,7 +33,6 @@ frame_id  = b69ddd8d-bcad-483f-adf4-e15ff9a48c47
 [nana]
 file_path = ./images-sisters-frame
 frame_id = cd3e8813-8fb6-434f-b709-e66deb3ea2a6
-
 
 You can get the frame ID by doing the following:
 
