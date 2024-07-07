@@ -1,0 +1,9 @@
+# general good to have packages
+wheel
+setuptools
+
+# needed to talk to the API
+requests
+
+# The linter
+prospector
