@@ -20,7 +20,7 @@ def parse_command_line():
     parser.add_argument(
         "--config",
         help="configuration file",
-        default=os.path.join('etc','credentials.ini'),
+        default=os.path.join(os.path.expanduser('~'),'etc','aura','credentials.ini'),
         required=False,
     )
 
