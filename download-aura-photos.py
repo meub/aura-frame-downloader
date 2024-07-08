@@ -115,7 +115,7 @@ def download_photos_from_aura(email, password, frame_id, file_path):
 
             # check if file exists and skip it if so
             if os.path.isfile(file_to_write):
-                LOGGER.info("%i: Skipping {new_filename}, already downloaded", counter)
+                LOGGER.info("%i: Skipping %s, already downloaded", counter, new_filename)
                 skipped += 1
                 continue
 
