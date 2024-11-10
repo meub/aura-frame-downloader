@@ -32,6 +32,14 @@ def parse_command_line():
         required=False,
     )
 
+    parser.add_argument(
+        "--count",
+        help="show count of photos then exit",
+        action="store_true",
+        default=False,
+        required=False,
+    )
+
     parser.add_argument('frame', nargs='?')
     return parser.parse_args()
 
@@ -53,7 +61,7 @@ def setup_logger(log_debug=False):
 
 
 # Main download function
-def download_photos_from_aura(email, password, frame_id, file_path):
+def download_photos_from_aura(email, password, frame_id, file_path, args):
     # define URLs and payload format
     login_url = "https://api.pushd.com/v5/login.json"
     frame_url = f"https://api.pushd.com/v5/frames/{frame_id}/assets.json?side_load_users=false"
@@ -96,7 +104,10 @@ def download_photos_from_aura(email, password, frame_id, file_path):
         sys.exit(0)
 
     photo_count = len(json_data["assets"])
-    LOGGER.info("Found %s photos, starting download process", photo_count)
+    LOGGER.info("Found %s photos.", photo_count)
+    if args.count: sys.exit()
+
+    LOGGER.info("Starting download process")
 
     for item in json_data["assets"]:
 
@@ -181,7 +192,7 @@ def app():
         LOGGER.info("Creating new images directory: %s", file_path)
         os.makedirs(file_path)
 
-    total = download_photos_from_aura(email, password, frame_id, file_path)
+    total = download_photos_from_aura(email, password, frame_id, file_path, args)
     LOGGER.info("Downloaded %i photos", total)
 
 
