@@ -27,7 +27,7 @@ An example file can found under etc/credentials.ini
     frame_id  = abf53be3-b73d-4de3-98cd-cfd289bd82df
 
     [anotherframe]
-    file_path = /images-another-frame
+    file_path = ./images-another-frame
     frame_id  = b69ddd8d-bcad-483f-adf4-e15ff9a48c47
 
     [alastframe]
@@ -44,7 +44,7 @@ You can get the frame ID by doing the following:
 
 ### Usage
 
-    usage: download-aura-photos.py [-h] [--config CONFIG] [--debug] [--count] [frame]
+    usage: download-aura-photos.py [-h] [--config CONFIG] [--debug] [--count] [--years] [frame]
 
     positional arguments:
       frame
@@ -54,25 +54,39 @@ You can get the frame ID by doing the following:
       --config CONFIG  configuration file
       --debug          debug log output
       --count          show count of photos then exit
+      --=years         store pictures in a directory for the year in the
+                        json 'taken_at' data. 
 
     # example commands
     python download-aura-photos.py myframe
     python download-aura-photos.py --config /alternate/path/to/credentials.ini myframe
     python download-aura-photos.py --count myframe
     python download-aura-photos.py --count --config /alternate/path/to/credentials.ini myframe
+    python download-aura-photos.py --years myframe
 
 
 Photos will be downloaded to the folder defined by the frame's file_path parameter in the configuration file. The Aura API will throttle the downloads so you may have to restart the script multiple times to fully download all of your photos. 
 
 The good thing is that download progress is saved so photos that are already downloaded will be skipped when restarting the script. You can also adjust the `time.sleep(2)` to something longer if throttling becomes a problem.
 
-The script creates the local image file named using the following attributes from the 
+The script creates the local image file name using the following attributes from the 
 item JSON data.
  * 'taken_at' (a timestamp) 
  * 'id' (a unique identifier in the Aura frame)
  * 'file_name' (the extension only) 
 
 Example filename: 2012-04-15-03-15-04.000_B9A0E367-FA8D-4157-A090-7EE33F603312.jpeg
+
+When the --years command line argument is used, the script combines the frame's
+file_path from the configuration and the year from the json data for the final output
+directory name.  It then creates the directory if needed and saves the file there.
+This improved performance when viewing files as icons in Windows Explorer by reducing
+the number of files per directory.
+
+Example.
+    Using file_path = ./images-another-frame and the example filename above,
+    the downloaded file will be stored in :
+    ./images-another-frame/2012/2012-04-15-03-15-04.000_B9A0E367-FA8D-4157-A090-7EE33F603312.jpeg 
 
 Note: It's possible for the same picture file to be uploaded to an Aura frame by different people.  This will result in each picture being downloaded to a separate filename under images/.  If there are a lot of people updating a frame, you may want to run a duplicate photo finder on the downloaded photos.
 
@@ -91,4 +105,4 @@ for the project, or activate it manually.
 
 Then run the script.
 
-    $ python ./download-aura-photos.py [--count] [--config path] frame_name
+    $ python ./download-aura-photos.py [--count] [--config path] [--years] frame_name

@@ -33,6 +33,14 @@ def parse_command_line():
     )
 
     parser.add_argument(
+        "--years",
+        help="save pictures folder by year",
+        action="store_true",
+        default=False,
+        required=False,
+    )
+
+    parser.add_argument(
         "--count",
         help="show count of photos then exit",
         action="store_true",
@@ -41,7 +49,8 @@ def parse_command_line():
     )
 
     parser.add_argument('frame', nargs='?')
-    return parser.parse_args()
+    args = parser.parse_args()
+    return args 
 
 def setup_logger(log_debug=False):
     """
@@ -119,7 +128,18 @@ def download_photos_from_aura(email, password, frame_id, file_path, args):
             # But clean the timestamp to be Windows-friendly
             clean_time = item['taken_at'].replace(':', '-')
             new_filename = clean_time + "_" + item['id'] + os.path.splitext(item['file_name'])[1]
-            file_to_write = os.path.join(file_path, new_filename)
+
+            if args.years:
+                # download picture to file_path/year/picture, 
+                # creating file_path/year if necessary
+                year_dir = os.path.join(file_path,clean_time[:4])
+                if not os.path.isdir(year_dir):
+                    LOGGER.debug("Creating new year directory: %s", year_dir)
+                    os.makedirs(year_dir)
+                file_to_write = os.path.join(year_dir, new_filename)
+            else:
+                # default to download picture to file_path/picture
+                file_to_write = os.path.join(file_path, new_filename)
 
             # Bump the counter and print the new_filename out to track progress
             counter += 1
@@ -178,12 +198,21 @@ def app():
         config = configparser.ConfigParser()
         config.read(args.config)
 
+        if not config.has_section('login'):
+            LOGGER.error("No [login] section found in file '%s'.", args.config)
+            sys.exit(1)
+
+        if not config.has_section(args.frame):
+            LOGGER.error("No frame [%s] found in file '%s'.", args.frame, args.config)
+            sys.exit(1)
+                
         email = config['login']['email']
         password = config['login']['password']
         frame_id = config[args.frame]['frame_id']
         file_path = config[args.frame]['file_path']
+
     except Exception:
-        LOGGER.error("Invalid frame name '%s' to download from", args.frame)
+        LOGGER.error("Error pasring config file '%s'.", args.config)
         sys.exit(1)
 
     # Check the output directory exists in case the script is moved

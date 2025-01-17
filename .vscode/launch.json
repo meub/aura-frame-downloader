@@ -14,11 +14,21 @@
           "justMyCode": true
       },
       {
-        "name": "Downloader",
+        "name": "Download",
         "type": "debugpy",
         "request": "launch",
         "program": "./download-aura-photos.py",
         "args": ["${input:frameName}"],
+        "cwd": "${fileDirname}",
+        "console": "integratedTerminal",
+        "justMyCode": true
+    },
+      {
+        "name": "Download by year",
+        "type": "debugpy",
+        "request": "launch",
+        "program": "./download-aura-photos.py",
+        "args": ["--years", "${input:frameName}"],
         "cwd": "${fileDirname}",
         "console": "integratedTerminal",
         "justMyCode": true
