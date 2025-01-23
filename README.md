@@ -4,7 +4,19 @@ This is a script to bulk download photos from an Aura digital picture frame (aur
 
 ### Setup
 
-This script requires Python 3 and depends on the Python [requests](https://github.com/psf/requests) module. Before running this script you need to set up a configuration file that contains your Aura email, password, and the file_path and frame_id for each Aura frame you want to download from. This allows you to keep your Aura login credentials out of the repository and allows you to set up multiple frames to download.
+This script requires Python 3 and depends on the Python [requests](https://github.com/psf/requests) module. Before running this script you need to set up a configuration file that contains your Aura email, password, and the file_path and frame_id for each Aura frame you want to download from. This allows you to keep your Aura login credentials out of the repository and allows you to set up multiple frames to download. The frame names in the config file don't need to match anything, it's just something you'll be able to reference when you run the command. However, the frame_id must match exactly.
+
+### Getting your frame ID
+
+You can get the frame ID by doing the following:
+
+ * Go to https://app.auraframes.com and log in
+ * Click on the Frame name
+ * Click on "View Photos" underneath the frame
+ * Then grab the ID from the URL: `https://app.auraframes.com/frame/<FRAME ID HERE>`
+
+
+### Configuration File
 
 The default configuration file locations are below. They can be overridded using the --config /path/to/config.ini command line option
 
@@ -14,13 +26,15 @@ The default configuration file locations are below. They can be overridded using
 An example file can found under etc/credentials.ini
 
 
-#### Credentials to log into api.auraframes.com
+#### Config file first section: credentials to log into api.auraframes.com
 
     [login]
     email = myemail2@gmail.com
     password = mYpa$$w0rd-11
 
-#### Defined frames, One section per frame
+#### Config file second section: defined frames, one section per frame
+
+The frame names in the config file don't need match anything. They are just used so you can reference them when running the commands.
 
     [myframe]
     file_path = ./images
@@ -34,12 +48,6 @@ An example file can found under etc/credentials.ini
     file_path = ./images-last-frame
     frame_id = cd3e8813-8fb6-434f-b709-e66deb3ea2a6
 
-You can get the frame ID by doing the following:
-
- * Go to https://app.auraframes.com and log in
- * Click on the Frame name
- * Click on "View Photos" underneath the frame
- * Then grab the ID from the URL: `https://app.auraframes.com/frame/<FRAME ID HERE>`
 
 
 ### Usage
@@ -92,8 +100,7 @@ Note: It's possible for the same picture file to be uploaded to an Aura frame by
 
 ### Development notes
 
-The Makefile is set up to install a python virtual environment with the requests and prospector
-modules installed under the venv folder. 
+The Makefile is set up to install a python virtual environment with the requests and prospector modules installed under the venv folder. 
 
     $  make install
 

@@ -212,7 +212,7 @@ def app():
         file_path = config[args.frame]['file_path']
 
     except Exception:
-        LOGGER.error("Error pasring config file '%s'.", args.config)
+        LOGGER.error("Error parsing config file '%s'.", args.config)
         sys.exit(1)
 
     # Check the output directory exists in case the script is moved
