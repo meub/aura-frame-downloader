@@ -195,7 +195,7 @@ def app():
     try :
         # Read the frame and login credentials from outside the repo
         LOGGER.info("Using credentials file '%s'", args.config)
-        config = configparser.ConfigParser()
+        config = configparser.ConfigParser(interpolation=None)
         config.read(args.config)
 
         if not config.has_section('login'):
