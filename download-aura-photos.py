@@ -25,6 +25,12 @@ def parse_command_line():
     )
 
     parser.add_argument(
+        "--save-assets",
+        help="file to save Aura asset information to",
+        required=False,
+    )
+
+    parser.add_argument(
         "--debug",
         help="debug log output",
         action="store_true",
@@ -105,6 +111,10 @@ def download_photos_from_aura(email, password, frame_id, file_path, args):
     json_data = json.loads(r.text)
     counter = 0
     skipped = 0
+
+    if args.save_assets:
+        with open(args.save_assets, "w") as f:
+            json.dump(json_data, f, indent=True)
 
     # check to make sure the frame assets array exists
     if "assets" not in json_data:
