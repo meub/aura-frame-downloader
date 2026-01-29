@@ -10,7 +10,12 @@ help:
 	@echo "Makefile commands are:"
 	@echo "  default      - runs make lint"
 	@echo "  install      - install a new runtime virtual env"
+	@echo "  install-gui  - install GUI dependencies (PyQt6, PyInstaller)"
 	@echo "  lint         - run prospector linter"
+	@echo "  run-gui      - run the GUI application"
+	@echo "  build-mac    - build macOS .app bundle"
+	@echo "  build-win    - build Windows .exe (run on Windows)"
+	@echo "  clean-build  - remove build artifacts"
 	@echo
 
 install: clean-venv install-venv install-packages
@@ -30,6 +35,27 @@ install-packages:
 	./venv/bin/pip install --upgrade pip setuptools wheel
 	./venv/bin/pip install -r ./requirements.txt
 
+install-gui:
+	@echo "--> Installing GUI dependencies"
+	./venv/bin/pip install PyQt6>=6.4.0 pyinstaller>=6.0.0
+
 lint:
 	prospector
 
+run-gui:
+	@echo "--> Running Aura Frame Downloader GUI"
+	./venv/bin/python aura_gui.py
+
+build-mac:
+	@echo "--> Building macOS application bundle"
+	./venv/bin/pyinstaller aura_gui.spec
+	@echo "--> Build complete: dist/Aura Downloader.app"
+
+build-win:
+	@echo "--> Building Windows executable"
+	./venv/Scripts/pyinstaller.exe aura_gui.spec
+	@echo "--> Build complete: dist/Aura Downloader.exe"
+
+clean-build:
+	@echo "--> Removing build artifacts"
+	rm -rf build dist *.spec.bak

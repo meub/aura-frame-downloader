@@ -7,3 +7,9 @@ requests
 
 # The linter
 prospector
+
+# GUI dependencies
+PyQt6>=6.4.0
+
+# For building standalone executables
+pyinstaller>=6.0.0

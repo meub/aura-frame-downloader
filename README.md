@@ -1,115 +1,130 @@
 # Aura Frame Downloader
 
-This is a script to bulk download photos from an Aura digital picture frame (auraframes.com). Aura provides no easy way to bulk download photos so I created this for use with Python. Aura stores all photos on their servers so no physical access to the frame is necessary to download them.
+Bulk download photos from your Aura digital picture frame (auraframes.com). Aura provides no easy way to bulk download photos, so this tool lets you download all your photos at once. Since Aura stores photos on their servers, no physical access to the frame is needed.
+
+---
+
+## Download & Install (Easiest)
+
+### macOS (Apple Silicon)
+
+1. **Download** the latest release: [Aura-Downloader-macOS-arm64.zip](https://github.com/meuba/aura-frame-downloader/releases/latest)
+
+2. **Unzip** and drag `Aura Downloader.app` to your Applications folder
+
+3. **First launch** - Right-click the app and select "Open" (required once since the app isn't signed by Apple)
+   - If you see "app is damaged", run this in Terminal:
+     ```bash
+     xattr -cr "/Applications/Aura Downloader.app"
+     ```
+
+4. **Use the app:**
+   - Enter your Aura email and password
+   - Click "Add Frame" and enter your frame details (see [Getting your Frame ID](#getting-your-frame-id) below)
+   - Select a download folder
+   - Click "Start Download"
+
+Your credentials and frame settings are saved automatically for next time.
+
+### Windows
+
+Windows build coming soon. For now, use the [Command Line](#command-line-usage) method below.
+
+---
+
+## Getting your Frame ID
+
+1. Go to https://app.auraframes.com and log in
+2. Click on the Frame name
+3. Click on "View Photos" underneath the frame
+4. Grab the ID from the URL: `https://app.auraframes.com/frame/<FRAME ID HERE>`
+
+---
+
+## Command Line Usage
+
+If you prefer the command line or are on Windows/Linux:
 
 ### Setup
 
-This script requires Python 3 and depends on the Python [requests](https://github.com/psf/requests) module. Before running this script you need to set up a configuration file that contains your Aura email, password, and the file_path and frame_id for each Aura frame you want to download from. This allows you to keep your Aura login credentials out of the repository and allows you to set up multiple frames to download. The frame names in the config file don't need to match anything, it's just something you'll be able to reference when you run the command. However, the frame_id must match exactly.
+1. Install Python 3 and the requests module:
+   ```bash
+   pip install requests
+   ```
 
-### Getting your frame ID
+2. Create a configuration file at:
+   - **Windows:** `%USERPROFILE%/etc/aura/credentials.ini`
+   - **Mac/Linux:** `$HOME/etc/aura/credentials.ini`
 
-You can get the frame ID by doing the following:
+   Example config:
+   ```ini
+   [login]
+   email = myemail@gmail.com
+   password = mypassword
 
- * Go to https://app.auraframes.com and log in
- * Click on the Frame name
- * Click on "View Photos" underneath the frame
- * Then grab the ID from the URL: `https://app.auraframes.com/frame/<FRAME ID HERE>`
+   [myframe]
+   file_path = ./images
+   frame_id = abf53be3-b73d-4de3-98cd-cfd289bd82df
 
+   [anotherframe]
+   file_path = ./images-another-frame
+   frame_id = b69ddd8d-bcad-483f-adf4-e15ff9a48c47
+   ```
 
-### Configuration File
+### Commands
 
-The default configuration file locations are below. They can be overridded using the --config /path/to/config.ini command line option
+```bash
+# Download photos from a frame
+python download-aura-photos.py myframe
 
- * Windows: %USERPROFILE%/etc/aura/credentials.ini
- * Linux and Mac  : $HOME/etc/aura/credentials.ini
+# Show photo count only
+python download-aura-photos.py --count myframe
 
-An example file can found under etc/credentials.ini
+# Organize by year folders
+python download-aura-photos.py --years myframe
 
+# Use alternate config file
+python download-aura-photos.py --config /path/to/config.ini myframe
+```
 
-#### Config file first section: credentials to log into api.auraframes.com
+### Options
 
-    [login]
-    email = myemail2@gmail.com
-    password = mYpa$$w0rd-11
+| Option | Description |
+|--------|-------------|
+| `--config PATH` | Use alternate configuration file |
+| `--count` | Show photo count and exit |
+| `--years` | Organize photos into year subfolders |
+| `--debug` | Enable debug logging |
 
-#### Config file second section: defined frames, one section per frame
+---
 
-The frame names in the config file don't need match anything. They are just used so you can reference them when running the commands.
+## Notes
 
-    [myframe]
-    file_path = ./images
-    frame_id  = abf53be3-b73d-4de3-98cd-cfd289bd82df
+- **Throttling:** The Aura API may throttle downloads. The script automatically waits between downloads, but you may need to restart it for large collections.
 
-    [anotherframe]
-    file_path = ./images-another-frame
-    frame_id  = b69ddd8d-bcad-483f-adf4-e15ff9a48c47
+- **Resume support:** Already-downloaded photos are skipped, so you can safely restart the script.
 
-    [alastframe]
-    file_path = ./images-last-frame
-    frame_id = cd3e8813-8fb6-434f-b709-e66deb3ea2a6
+- **Filename format:** `2012-04-15-03-15-04.000_B9A0E367-FA8D-4157-A090-7EE33F603312.jpeg`
+  - Based on `taken_at` timestamp + unique `id` + original extension
 
+- **Duplicates:** The same photo uploaded by different people will be downloaded separately. Consider running a duplicate finder afterward.
 
+---
 
-### Usage
+## Development
 
-    usage: download-aura-photos.py [-h] [--config CONFIG] [--debug] [--count] [--years] [frame]
+```bash
+# Install virtual environment with dependencies
+make install
 
-    positional arguments:
-      frame
+# Run the GUI
+make run-gui
 
-    options:
-      -h, --help       show this help message and exit
-      --config CONFIG  configuration file
-      --debug          debug log output
-      --count          show count of photos then exit
-      --=years         store pictures in a directory for the year in the
-                        json 'taken_at' data. 
+# Build macOS app
+make build-mac
 
-    # example commands
-    python download-aura-photos.py myframe
-    python download-aura-photos.py --config /alternate/path/to/credentials.ini myframe
-    python download-aura-photos.py --count myframe
-    python download-aura-photos.py --count --config /alternate/path/to/credentials.ini myframe
-    python download-aura-photos.py --years myframe
+# Run linter
+make lint
+```
 
-
-Photos will be downloaded to the folder defined by the frame's file_path parameter in the configuration file. The Aura API will throttle the downloads so you may have to restart the script multiple times to fully download all of your photos. 
-
-The good thing is that download progress is saved so photos that are already downloaded will be skipped when restarting the script. You can also adjust the `time.sleep(2)` to something longer if throttling becomes a problem.
-
-The script creates the local image file name using the following attributes from the 
-item JSON data.
- * 'taken_at' (a timestamp) 
- * 'id' (a unique identifier in the Aura frame)
- * 'file_name' (the extension only) 
-
-Example filename: 2012-04-15-03-15-04.000_B9A0E367-FA8D-4157-A090-7EE33F603312.jpeg
-
-When the --years command line argument is used, the script combines the frame's
-file_path from the configuration and the year from the json data for the final output
-directory name.  It then creates the directory if needed and saves the file there.
-This improved performance when viewing files as icons in Windows Explorer by reducing
-the number of files per directory.
-
-Example.
-    Using file_path = ./images-another-frame and the example filename above,
-    the downloaded file will be stored in :
-    ./images-another-frame/2012/2012-04-15-03-15-04.000_B9A0E367-FA8D-4157-A090-7EE33F603312.jpeg 
-
-Note: It's possible for the same picture file to be uploaded to an Aura frame by different people.  This will result in each picture being downloaded to a separate filename under images/.  If there are a lot of people updating a frame, you may want to run a duplicate photo finder on the downloaded photos.
-
-### Development notes
-
-The Makefile is set up to install a python virtual environment with the requests and prospector modules installed under the venv folder. 
-
-    $  make install
-
-
-To use the virtual environment as the default python, tell your IDE to use venv/bin/python
-for the project, or activate it manually.
-
-    $ . venv/bin/activate
-
-Then run the script.
-
-    $ python ./download-aura-photos.py [--count] [--config path] [--years] frame_name
+See `make help` for all available commands.

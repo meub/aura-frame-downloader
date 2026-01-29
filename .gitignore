@@ -1,7 +1,17 @@
 .DS_Store
 
-# custom image directories
+# Custom image directories
 images-*
+
+# Credentials and private config files
+credentials.ini
+*.credentials
+secrets.ini
+.env.local
+.env.*.local
+
+# PyQt/Qt settings (contains saved passwords)
+.qt_for_python/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -36,7 +46,8 @@ MANIFEST
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
-*.spec
+# Keep aura_gui.spec for builds, ignore auto-generated ones
+*.spec.bak
 
 # Installer logs
 pip-log.txt
@@ -132,3 +143,24 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# IDE settings
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Downloaded photos (in case someone downloads to project dir)
+photos/
+downloads/
