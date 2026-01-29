@@ -28,7 +28,19 @@ Your credentials and frame settings are saved automatically for next time.
 
 ### Windows
 
-Windows build coming soon. For now, use the [Command Line](#command-line-usage) method below.
+1. **Download** the latest release: [Aura-Downloader-Windows.zip](https://github.com/meub/aura-frame-downloader/releases/latest)
+
+2. **Unzip** and run `Aura Downloader.exe`
+   - Windows may show a SmartScreen warning since the app isn't signed
+   - Click "More info" then "Run anyway"
+
+3. **Use the app:**
+   - Enter your Aura email and password
+   - Click "Add Frame" and enter your frame details (see [Getting your Frame ID](#getting-your-frame-id) below)
+   - Select a download folder
+   - Click "Start Download"
+
+Your credentials and frame settings are saved automatically for next time.
 
 ---
 
@@ -113,6 +125,8 @@ python download-aura-photos.py --config /path/to/config.ini myframe
 
 ## Development
 
+### macOS/Linux
+
 ```bash
 # Install virtual environment with dependencies
 make install
@@ -128,3 +142,18 @@ make lint
 ```
 
 See `make help` for all available commands.
+
+### Windows (PowerShell)
+
+```powershell
+# Full build (install + build)
+.\build_windows.ps1 -All
+
+# Or step by step:
+.\build_windows.ps1 -Install    # Create venv and install dependencies
+.\build_windows.ps1 -Build      # Build the executable
+.\build_windows.ps1 -Run        # Run GUI from source
+.\build_windows.ps1 -Clean      # Remove build artifacts
+```
+
+The built executable will be at `dist\Aura Downloader.exe`.
