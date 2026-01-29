@@ -45,9 +45,14 @@ class FrameDialog(QDialog):
         self.name_input.setPlaceholderText("e.g., Living Room Frame")
         form.addRow("Frame Name:", self.name_input)
 
+        frame_id_layout = QHBoxLayout()
         self.frame_id_input = QLineEdit()
         self.frame_id_input.setPlaceholderText("Frame ID from Aura")
-        form.addRow("Frame ID:", self.frame_id_input)
+        frame_id_help = QLabel('<a href="https://github.com/meub/aura-frame-downloader?tab=readme-ov-file#getting-your-frame-id">Help</a>')
+        frame_id_help.setOpenExternalLinks(True)
+        frame_id_layout.addWidget(self.frame_id_input)
+        frame_id_layout.addWidget(frame_id_help)
+        form.addRow("Frame ID:", frame_id_layout)
 
         # Download path with browse button
         path_layout = QHBoxLayout()
