@@ -8,7 +8,7 @@ Bulk download photos from your Aura digital picture frame (auraframes.com). Aura
 
 ### macOS (Apple Silicon)
 
-1. **Download** the latest release: [Aura-Downloader-macOS-arm64.zip](https://github.com/meuba/aura-frame-downloader/releases/latest)
+1. **Download** the latest release: [Aura-Downloader-macOS-arm64.zip](https://github.com/meub/aura-frame-downloader/releases/latest)
 
 2. **Unzip** and drag `Aura Downloader.app` to your Applications folder
 
