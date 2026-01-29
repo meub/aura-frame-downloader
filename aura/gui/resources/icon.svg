@@ -12,7 +12,10 @@
   <!-- Sun -->
   <circle cx="44" cy="20" r="6" fill="#FFD93D"/>
 
-  <!-- Bottom bar suggesting download -->
-  <rect x="10" y="42" width="44" height="12" fill="#4A4A4A"/>
-  <polygon points="32,44 38,50 35,50 35,52 29,52 29,50 26,50" fill="#FFFFFF"/>
+  <!-- Bottom bar with download arrow -->
+  <rect x="10" y="40" width="44" height="14" fill="#4A4A4A"/>
+  <!-- Arrow shaft -->
+  <rect x="29" y="42" width="6" height="6" fill="#FFFFFF"/>
+  <!-- Arrow head pointing down -->
+  <polygon points="32,54 24,46 28,46 28,42 36,42 36,46 40,46" fill="#FFFFFF"/>
 </svg>
