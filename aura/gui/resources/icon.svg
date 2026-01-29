@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Outer frame border -->
+  <rect x="4" y="4" width="56" height="56" rx="4" fill="#5B8DEE" stroke="#3D6BC9" stroke-width="2"/>
+
+  <!-- Inner frame (photo area) -->
+  <rect x="10" y="10" width="44" height="44" rx="2" fill="#FFFFFF"/>
+
+  <!-- Simple landscape scene - mountains -->
+  <polygon points="10,42 22,26 34,42" fill="#7BC67B"/>
+  <polygon points="26,42 42,22 54,42" fill="#5AA65A"/>
+
+  <!-- Sun -->
+  <circle cx="44" cy="20" r="6" fill="#FFD93D"/>
+
+  <!-- Bottom bar suggesting download -->
+  <rect x="10" y="42" width="44" height="12" fill="#4A4A4A"/>
+  <polygon points="32,44 38,50 35,50 35,52 29,52 29,50 26,50" fill="#FFFFFF"/>
+</svg>
