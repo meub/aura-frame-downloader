@@ -23,7 +23,7 @@ def load_config(config_path: str) -> configparser.ConfigParser:
     if not os.path.exists(config_path):
         raise ConfigError(f"Config file '{config_path}' not found")
 
-    config = configparser.ConfigParser()
+    config = configparser.ConfigParser(interpolation=None)
     try:
         config.read(config_path)
     except Exception as e:
