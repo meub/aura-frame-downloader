@@ -57,6 +57,11 @@ def parse_command_line():
         default=False,
         required=False,
     )
+    parser.add_argument(
+        "--save-assets",
+        help="write the raw asset JSON returned by the Aura API to this file",
+        required=False,
+    )
     parser.add_argument('frame', nargs='?')
     args = parser.parse_args()
     return args
@@ -117,6 +122,7 @@ def app():
             organize_by_year=args.years,
             count_only=args.count,
             videos_only=args.videos_only,
+            save_assets_path=args.save_assets,
         )
 
         if args.count:

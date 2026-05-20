@@ -65,13 +65,18 @@ def create_session(email: str, password: str) -> requests.Session:
     return session
 
 
-def get_frame_assets(session: requests.Session, frame_id: str) -> List[Dict]:
+def get_frame_assets(
+    session: requests.Session,
+    frame_id: str,
+    save_raw_response_path: Optional[str] = None,
+) -> List[Dict]:
     """
     Fetch assets from a frame.
 
     Args:
         session: Authenticated requests.Session
         frame_id: ID of the frame to fetch assets from
+        save_raw_response_path: If set, write the full JSON response to this path
 
     Returns:
         List of asset dictionaries
@@ -82,6 +87,11 @@ def get_frame_assets(session: requests.Session, frame_id: str) -> List[Dict]:
     frame_url = FRAME_URL_TEMPLATE.format(frame_id=frame_id)
     response = session.get(frame_url)
     json_data = json.loads(response.text)
+
+    if save_raw_response_path:
+        with open(save_raw_response_path, 'w') as f:
+            json.dump(json_data, f, indent=2)
+        LOGGER.info("Saved raw asset JSON to %s", save_raw_response_path)
 
     if "assets" not in json_data:
         LOGGER.error("No images returned from this Aura Frame. API responded with:")
@@ -99,6 +109,7 @@ def download_photos_from_aura(
     organize_by_year: bool = False,
     count_only: bool = False,
     videos_only: bool = False,
+    save_assets_path: Optional[str] = None,
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
 ) -> Tuple[int, int, int]:
@@ -113,6 +124,7 @@ def download_photos_from_aura(
         organize_by_year: If True, organize photos into year subdirectories
         count_only: If True, return count without downloading
         videos_only: If True, only download video clips, skip still photos
+        save_assets_path: If set, write the raw assets JSON returned by the API to this path
         progress_callback: Optional callback(current, total, filename) for progress updates
         cancel_check: Optional callback() that returns True if download should be cancelled
 
@@ -129,7 +141,7 @@ def download_photos_from_aura(
     session = create_session(email, password)
 
     # Get frame assets
-    assets = get_frame_assets(session, frame_id)
+    assets = get_frame_assets(session, frame_id, save_raw_response_path=save_assets_path)
     total_count = len(assets)
     LOGGER.info("Found %s photos", total_count)
 

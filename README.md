@@ -98,6 +98,9 @@ python download-aura-photos.py --years myframe
 # Only download video clips (skip stills)
 python download-aura-photos.py --videos-only myframe
 
+# Save raw API JSON to a file (for debugging)
+python download-aura-photos.py --save-assets /tmp/aura-assets.json myframe
+
 # Use alternate config file
 python download-aura-photos.py --config /path/to/config.ini myframe
 ```
@@ -110,6 +113,7 @@ python download-aura-photos.py --config /path/to/config.ini myframe
 | `--count` | Show photo count and exit |
 | `--years` | Organize photos into year subfolders |
 | `--videos-only` | Only download video clips, skip still photos |
+| `--save-assets FILE` | Write the raw asset JSON returned by the Aura API to FILE |
 | `--debug` | Enable debug logging |
 
 ---
