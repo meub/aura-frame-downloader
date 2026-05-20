@@ -154,51 +154,56 @@ def download_photos_from_aura(
             raise DownloadCancelledError("Download cancelled by user")
 
         try:
-            # Construct the raw photo URL
-            url = IMAGE_URL_TEMPLATE.format(
-                user_id=item['user_id'],
-                file_name=item['file_name']
-            )
-
-            # Make a unique filename using timestamp + id + extension
-            # Clean the timestamp to be Windows-friendly
             clean_time = item['taken_at'].replace(':', '-')
-            new_filename = clean_time + "_" + item['id'] + os.path.splitext(item['file_name'])[1]
 
             if organize_by_year:
-                # Download picture to file_path/year/picture
-                year_dir = os.path.join(file_path, clean_time[:4])
-                if not os.path.isdir(year_dir):
-                    LOGGER.debug("Creating new year directory: %s", year_dir)
-                    os.makedirs(year_dir)
-                file_to_write = os.path.join(year_dir, new_filename)
+                out_dir = os.path.join(file_path, clean_time[:4])
+                if not os.path.isdir(out_dir):
+                    LOGGER.debug("Creating new year directory: %s", out_dir)
+                    os.makedirs(out_dir)
             else:
-                # Default to download picture to file_path/picture
-                file_to_write = os.path.join(file_path, new_filename)
+                out_dir = file_path
 
-            # Update progress
-            if progress_callback:
-                progress_callback(current, total_count, new_filename)
+            # Each asset may have a still image, a video (Live Photo / video clip), or both.
+            # Build a list of (label, url, target_path) for whichever components are present.
+            downloads = []
 
-            # Check if file exists and skip it if so
-            if os.path.isfile(file_to_write):
-                LOGGER.info("%i: Skipping %s, already downloaded", current, new_filename)
-                skipped_count += 1
-                continue
+            still_name = item.get('file_name')
+            if still_name:
+                still_url = IMAGE_URL_TEMPLATE.format(
+                    user_id=item['user_id'],
+                    file_name=still_name,
+                )
+                still_filename = clean_time + "_" + item['id'] + os.path.splitext(still_name)[1]
+                downloads.append(('photo', still_url, os.path.join(out_dir, still_filename)))
 
-            # Get the photo from the url
-            LOGGER.info("%i: Downloading %s", current, new_filename)
-            response = requests.get(url, stream=True, timeout=90)
+            video_url = item.get('video_url')
+            video_name = item.get('video_file_name')
+            if video_url and video_name:
+                video_filename = clean_time + "_" + item['id'] + os.path.splitext(video_name)[1]
+                downloads.append(('video', video_url, os.path.join(out_dir, video_filename)))
 
-            # Write to a file
-            with open(file_to_write, 'wb') as out_file:
-                shutil.copyfileobj(response.raw, out_file)
-            del response
+            for label, url, file_to_write in downloads:
+                basename = os.path.basename(file_to_write)
 
-            downloaded_count += 1
+                if progress_callback:
+                    progress_callback(current, total_count, basename)
 
-            # Wait a bit to avoid throttling
-            time.sleep(2)
+                if os.path.isfile(file_to_write):
+                    LOGGER.info("%i: Skipping %s %s, already downloaded", current, label, basename)
+                    skipped_count += 1
+                    continue
+
+                LOGGER.info("%i: Downloading %s %s", current, label, basename)
+                response = requests.get(url, stream=True, timeout=90)
+
+                with open(file_to_write, 'wb') as out_file:
+                    shutil.copyfileobj(response.raw, out_file)
+                del response
+
+                downloaded_count += 1
+
+                time.sleep(2)
 
         except DownloadCancelledError:
             raise
