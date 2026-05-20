@@ -50,6 +50,13 @@ def parse_command_line():
         default=False,
         required=False,
     )
+    parser.add_argument(
+        "--videos-only",
+        help="only download video clips, skip still photos",
+        action="store_true",
+        default=False,
+        required=False,
+    )
     parser.add_argument('frame', nargs='?')
     args = parser.parse_args()
     return args
@@ -109,6 +116,7 @@ def app():
             file_path=file_path,
             organize_by_year=args.years,
             count_only=args.count,
+            videos_only=args.videos_only,
         )
 
         if args.count:

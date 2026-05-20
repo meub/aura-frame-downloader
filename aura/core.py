@@ -98,6 +98,7 @@ def download_photos_from_aura(
     file_path: str,
     organize_by_year: bool = False,
     count_only: bool = False,
+    videos_only: bool = False,
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
 ) -> Tuple[int, int, int]:
@@ -111,6 +112,7 @@ def download_photos_from_aura(
         file_path: Directory to save photos to
         organize_by_year: If True, organize photos into year subdirectories
         count_only: If True, return count without downloading
+        videos_only: If True, only download video clips, skip still photos
         progress_callback: Optional callback(current, total, filename) for progress updates
         cancel_check: Optional callback() that returns True if download should be cancelled
 
@@ -169,7 +171,7 @@ def download_photos_from_aura(
             downloads = []
 
             still_name = item.get('file_name')
-            if still_name:
+            if still_name and not videos_only:
                 still_url = IMAGE_URL_TEMPLATE.format(
                     user_id=item['user_id'],
                     file_name=still_name,

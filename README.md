@@ -95,6 +95,9 @@ python download-aura-photos.py --count myframe
 # Organize by year folders
 python download-aura-photos.py --years myframe
 
+# Only download video clips (skip stills)
+python download-aura-photos.py --videos-only myframe
+
 # Use alternate config file
 python download-aura-photos.py --config /path/to/config.ini myframe
 ```
@@ -106,6 +109,7 @@ python download-aura-photos.py --config /path/to/config.ini myframe
 | `--config PATH` | Use alternate configuration file |
 | `--count` | Show photo count and exit |
 | `--years` | Organize photos into year subfolders |
+| `--videos-only` | Only download video clips, skip still photos |
 | `--debug` | Enable debug logging |
 
 ---
