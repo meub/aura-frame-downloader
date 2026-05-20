@@ -190,6 +190,16 @@ class MainWindow(QMainWindow):
         self.year_checkbox = QCheckBox("Organize photos by year")
         options_layout.addWidget(self.year_checkbox)
 
+        # Videos only
+        self.videos_only_checkbox = QCheckBox("Only download video clips (skip still photos)")
+        options_layout.addWidget(self.videos_only_checkbox)
+
+        # Save raw API response (debug)
+        self.save_assets_checkbox = QCheckBox(
+            "Save raw API response to download folder (debug)"
+        )
+        options_layout.addWidget(self.save_assets_checkbox)
+
         layout.addWidget(options_group)
 
         # Progress section
@@ -220,6 +230,8 @@ class MainWindow(QMainWindow):
         self.email_input.setText(self.settings.value("email", ""))
         self.password_input.setText(self.settings.value("password", ""))
         self.year_checkbox.setChecked(self.settings.value("organize_by_year", False, type=bool))
+        self.videos_only_checkbox.setChecked(self.settings.value("videos_only", False, type=bool))
+        self.save_assets_checkbox.setChecked(self.settings.value("save_assets", False, type=bool))
 
         # Load frames
         frames_json = self.settings.value("frames", "[]")
@@ -242,6 +254,8 @@ class MainWindow(QMainWindow):
         self.settings.setValue("email", self.email_input.text())
         self.settings.setValue("password", self.password_input.text())
         self.settings.setValue("organize_by_year", self.year_checkbox.isChecked())
+        self.settings.setValue("videos_only", self.videos_only_checkbox.isChecked())
+        self.settings.setValue("save_assets", self.save_assets_checkbox.isChecked())
         self.settings.setValue("frames", json.dumps(self.frames))
         self.settings.setValue("selected_frame", self.frame_combo.currentText())
 
@@ -365,6 +379,10 @@ class MainWindow(QMainWindow):
         # Save settings before starting
         self._save_settings()
 
+        save_assets_path = None
+        if self.save_assets_checkbox.isChecked():
+            save_assets_path = os.path.join(download_path, "aura-assets.json")
+
         # Create and start worker
         self.worker = DownloadWorker(
             email=email,
@@ -372,6 +390,8 @@ class MainWindow(QMainWindow):
             frame_id=selected_frame['frame_id'],
             file_path=download_path,
             organize_by_year=self.year_checkbox.isChecked(),
+            videos_only=self.videos_only_checkbox.isChecked(),
+            save_assets_path=save_assets_path,
             parent=self
         )
 
@@ -399,6 +419,8 @@ class MainWindow(QMainWindow):
         self.remove_frame_btn.setEnabled(enabled)
         self.frame_combo.setEnabled(enabled)
         self.year_checkbox.setEnabled(enabled)
+        self.videos_only_checkbox.setEnabled(enabled)
+        self.save_assets_checkbox.setEnabled(enabled)
 
     def _truncate_filename(self, filename: str, max_length: int = 35) -> str:
         """Truncate filename with ellipsis in the middle if too long."""

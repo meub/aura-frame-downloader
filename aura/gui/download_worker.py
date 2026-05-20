@@ -27,6 +27,8 @@ class DownloadWorker(QThread):
         frame_id: str,
         file_path: str,
         organize_by_year: bool = False,
+        videos_only: bool = False,
+        save_assets_path: str = None,
         parent=None
     ):
         super().__init__(parent)
@@ -35,6 +37,8 @@ class DownloadWorker(QThread):
         self.frame_id = frame_id
         self.file_path = file_path
         self.organize_by_year = organize_by_year
+        self.videos_only = videos_only
+        self.save_assets_path = save_assets_path
         self._cancelled = False
 
     def cancel(self):
@@ -61,6 +65,8 @@ class DownloadWorker(QThread):
                 file_path=self.file_path,
                 organize_by_year=self.organize_by_year,
                 count_only=False,
+                videos_only=self.videos_only,
+                save_assets_path=self.save_assets_path,
                 progress_callback=self._progress_callback,
                 cancel_check=self._check_cancelled,
             )
