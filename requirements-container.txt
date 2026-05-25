@@ -1,0 +1,9 @@
+# Minimal dependencies for the container / S3 backup mode.
+# The full requirements.txt (with PyQt6, PyInstaller, etc.) is only
+# needed for the GUI and desktop builds.
+
+# Aura API HTTP calls
+requests
+
+# S3 uploads via StorageBackend
+boto3

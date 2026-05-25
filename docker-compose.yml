@@ -1,0 +1,12 @@
+services:
+  aura-backup:
+    build: .
+    env_file: .env
+    # Override CMD for a dry-run count (no downloads, no S3 writes):
+    #   docker compose run aura-backup python -c "
+    #     from aura.env_config import *; from aura.core import download_photos_from_aura
+    #     creds = load_credentials_from_env()
+    #     for f in load_frames_from_env():
+    #         _, _, n = download_photos_from_aura(creds['email'], creds['password'],
+    #                       f['frame_id'], '', count_only=True)
+    #         print(f['name'], n, 'photos')"

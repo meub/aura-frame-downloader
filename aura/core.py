@@ -3,7 +3,6 @@
 import json
 import logging
 import os
-import shutil
 import time
 from typing import Callable, Dict, List, Optional, Tuple
 
@@ -15,6 +14,7 @@ from .exceptions import (
     LoginError,
     NoAssetsError,
 )
+from .storage import LocalStorage, StorageBackend
 
 LOGGER = logging.getLogger(__name__)
 
@@ -100,6 +100,7 @@ def download_photos_from_aura(
     count_only: bool = False,
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
+    storage: Optional[StorageBackend] = None,
 ) -> Tuple[int, int, int]:
     """
     Download photos from an Aura frame.
@@ -108,11 +109,16 @@ def download_photos_from_aura(
         email: User's email address
         password: User's password
         frame_id: ID of the frame to download from
-        file_path: Directory to save photos to
+        file_path: Base directory to save photos to (used by LocalStorage;
+                   ignored by S3Storage which derives its paths from the
+                   StorageBackend prefix)
         organize_by_year: If True, organize photos into year subdirectories
         count_only: If True, return count without downloading
-        progress_callback: Optional callback(current, total, filename) for progress updates
-        cancel_check: Optional callback() that returns True if download should be cancelled
+        progress_callback: Optional callback(current, total, filename)
+        cancel_check: Optional callback() that returns True if download should
+                      be cancelled
+        storage: Storage backend to use.  Defaults to LocalStorage(file_path)
+                 so all existing callers (CLI, GUI) continue to work unchanged.
 
     Returns:
         Tuple of (downloaded_count, skipped_count, total_count)
@@ -123,6 +129,10 @@ def download_photos_from_aura(
         DownloadCancelledError: If download is cancelled via cancel_check
         DownloadError: If a critical download error occurs
     """
+    # Default to local filesystem — preserves existing CLI / GUI behaviour.
+    if storage is None:
+        storage = LocalStorage(file_path)
+
     # Create authenticated session
     session = create_session(email, password)
 
@@ -134,10 +144,8 @@ def download_photos_from_aura(
     if count_only:
         return (0, 0, total_count)
 
-    # Ensure output directory exists
-    if not os.path.isdir(file_path):
-        LOGGER.info("Creating new images directory: %s", file_path)
-        os.makedirs(file_path)
+    # Ensure output directory exists (no-op for S3Storage)
+    storage.makedirs(file_path)
 
     LOGGER.info("Starting download process")
 
@@ -160,39 +168,36 @@ def download_photos_from_aura(
                 file_name=item['file_name']
             )
 
-            # Make a unique filename using timestamp + id + extension
-            # Clean the timestamp to be Windows-friendly
+            # Make a unique filename using timestamp + id + extension.
+            # Clean the timestamp to be Windows-friendly (colons → dashes).
             clean_time = item['taken_at'].replace(':', '-')
             new_filename = clean_time + "_" + item['id'] + os.path.splitext(item['file_name'])[1]
 
             if organize_by_year:
-                # Download picture to file_path/year/picture
+                # Group by year: <year>/<filename>
+                # For LocalStorage, also ensure the year subdirectory exists.
                 year_dir = os.path.join(file_path, clean_time[:4])
-                if not os.path.isdir(year_dir):
-                    LOGGER.debug("Creating new year directory: %s", year_dir)
-                    os.makedirs(year_dir)
-                file_to_write = os.path.join(year_dir, new_filename)
+                storage.makedirs(year_dir)
+                key = os.path.join(clean_time[:4], new_filename)
             else:
-                # Default to download picture to file_path/picture
-                file_to_write = os.path.join(file_path, new_filename)
+                key = new_filename
 
             # Update progress
             if progress_callback:
                 progress_callback(current, total_count, new_filename)
 
-            # Check if file exists and skip it if so
-            if os.path.isfile(file_to_write):
+            # Check if already downloaded / uploaded and skip if so
+            if storage.exists(key):
                 LOGGER.info("%i: Skipping %s, already downloaded", current, new_filename)
                 skipped_count += 1
                 continue
 
-            # Get the photo from the url
+            # Fetch the photo
             LOGGER.info("%i: Downloading %s", current, new_filename)
             response = requests.get(url, stream=True, timeout=90)
 
-            # Write to a file
-            with open(file_to_write, 'wb') as out_file:
-                shutil.copyfileobj(response.raw, out_file)
+            # Write to storage (local file or S3 object)
+            storage.write_stream(key, response)
             del response
 
             downloaded_count += 1
