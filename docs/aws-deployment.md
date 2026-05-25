@@ -1,19 +1,21 @@
 # AWS Deployment Guide
 
-This guide walks through deploying the Aura Frame Downloader as a scheduled
-**AWS ECS Fargate** task that backs up your Aura frame photos to S3 on a
-recurring schedule.
+This guide deploys the Aura Frame Downloader as a scheduled **AWS ECS Fargate** task
+that backs up your Aura frame photos to S3 on a recurring schedule.
+
+All AWS resources are managed by a single CloudFormation template at
+`infrastructure/cloudformation.yaml`.  One deploy command creates everything.
 
 ---
 
-## Architecture Overview
+## Architecture
 
 ```
 EventBridge (cron rule)
     └─► ECS Scheduled Task (Fargate)
-            ├─ Image: ECR (your private repo)
-            ├─ Credentials: AWS Secrets Manager
-            └─► S3 Bucket (photo storage)
+            ├─ Image: ECR (private repository)
+            ├─ Credentials: AWS Secrets Manager (injected at startup)
+            └─► S3 Bucket (versioned photo storage)
 ```
 
 ---
@@ -21,340 +23,158 @@ EventBridge (cron rule)
 ## Prerequisites
 
 - AWS CLI configured (`aws configure`)
-- Docker installed locally
-- An AWS account with permissions to create: S3, ECR, ECS, IAM, EventBridge, Secrets Manager
+- Docker with BuildKit (Docker Desktop ≥ 4.x)
+- Permissions to create: S3, ECR, ECS, IAM, EventBridge, Secrets Manager, CloudWatch Logs
 
 ---
 
-## Step 1: Create the S3 Bucket
+## Step 1 — Find a subnet
+
+The Fargate task needs a public VPC subnet with internet access to reach the Aura API.
+A subnet from the default VPC works:
 
 ```bash
-aws s3api create-bucket \
-  --bucket my-aura-backup \
-  --region us-east-1
-
-# Enable versioning (recommended — lets you recover accidentally deleted photos)
-aws s3api put-bucket-versioning \
-  --bucket my-aura-backup \
-  --versioning-configuration Status=Enabled
-
-# Block all public access
-aws s3api put-public-access-block \
-  --bucket my-aura-backup \
-  --public-access-block-configuration \
-    BlockPublicAcls=true,IgnorePublicAcls=true,\
-BlockPublicPolicy=true,RestrictPublicBuckets=true
+aws ec2 describe-subnets \
+  --filters Name=defaultForAz,Values=true \
+  --query 'Subnets[0].SubnetId' \
+  --output text
+# → subnet-xxxxxxxx
 ```
 
 ---
 
-## Step 2: Store Credentials in AWS Secrets Manager
-
-Never put your Aura password in ECS task environment variables — use Secrets Manager:
+## Step 2 — Deploy the CloudFormation stack
 
 ```bash
-# Store Aura credentials as a single JSON secret
-aws secretsmanager create-secret \
-  --name aura-frame-downloader/credentials \
-  --secret-string '{
-    "AURA_EMAIL": "you@example.com",
-    "AURA_PASSWORD": "your-aura-password"
-  }'
-
-# Note the ARN returned — you'll need it in the task definition
+aws cloudformation deploy \
+  --template-file infrastructure/cloudformation.yaml \
+  --stack-name aura-backup \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides \
+      AuraEmail=you@example.com \
+      AuraPassword=your-password \
+      "AuraFrames=[{\"name\":\"Living Room\",\"frame_id\":\"your-frame-uuid\",\"s3_prefix\":\"living-room\"}]" \
+      BucketName=my-aura-backup-YOURNAME \
+      SubnetId=subnet-xxxxxxxx \
+      CpuArchitecture=X86_64
 ```
+
+> **Apple Silicon (M1/M2/M3)?** Use `CpuArchitecture=ARM64` — the image and the Fargate
+> task must share the same architecture.
+
+Optional parameters and their defaults:
+
+| Parameter | Default | Notes |
+|---|---|---|
+| `ScheduleExpression` | `cron(0 2 * * ? *)` | Daily at 02:00 UTC |
+| `OrganizeByYear` | `false` | Set `true` to group by year sub-folder |
+| `CpuArchitecture` | `X86_64` | `ARM64` for Apple Silicon builds |
 
 ---
 
-## Step 3: Create an ECR Repository and Push the Image
+## Step 3 — Build and push the Docker image
 
 ```bash
-# Create the repository
-aws ecr create-repository --repository-name aura-frame-downloader
+# Get the ECR URI from the stack outputs
+ECR_URI=$(aws cloudformation describe-stacks \
+  --stack-name aura-backup \
+  --query "Stacks[0].Outputs[?OutputKey=='ECRRepositoryUri'].OutputValue" \
+  --output text)
 
 # Authenticate Docker to ECR
-aws ecr get-login-password --region us-east-1 \
-  | docker login --username AWS \
-    --password-stdin 123456789012.dkr.ecr.us-east-1.amazonaws.com
+aws ecr get-login-password \
+  | docker login --username AWS --password-stdin "$ECR_URI"
 
-# Build, tag, and push
-docker build -t aura-frame-downloader .
-docker tag aura-frame-downloader:latest \
-  123456789012.dkr.ecr.us-east-1.amazonaws.com/aura-frame-downloader:latest
-docker push \
-  123456789012.dkr.ecr.us-east-1.amazonaws.com/aura-frame-downloader:latest
+# Build for the correct platform (match CpuArchitecture above)
+docker build --platform linux/amd64 -t "$ECR_URI:latest" .
+# docker build --platform linux/arm64 -t "$ECR_URI:latest" .  # ← ARM64
+
+# Push
+docker push "$ECR_URI:latest"
 ```
 
 ---
 
-## Step 4: Create the IAM Task Role
+## Step 4 — Test a manual run
 
-The ECS task needs permission to read the secret and write to S3.
-
-```bash
-# Create the role
-aws iam create-role \
-  --role-name AuraFrameDownloaderTaskRole \
-  --assume-role-policy-document '{
-    "Version": "2012-10-17",
-    "Statement": [{
-      "Effect": "Allow",
-      "Principal": {"Service": "ecs-tasks.amazonaws.com"},
-      "Action": "sts:AssumeRole"
-    }]
-  }'
-
-# S3 write policy
-aws iam put-role-policy \
-  --role-name AuraFrameDownloaderTaskRole \
-  --policy-name S3WritePolicy \
-  --policy-document '{
-    "Version": "2012-10-17",
-    "Statement": [{
-      "Effect": "Allow",
-      "Action": ["s3:PutObject", "s3:HeadObject", "s3:GetObject"],
-      "Resource": "arn:aws:s3:::my-aura-backup/*"
-    }, {
-      "Effect": "Allow",
-      "Action": "s3:ListBucket",
-      "Resource": "arn:aws:s3:::my-aura-backup"
-    }]
-  }'
-
-# Secrets Manager read policy
-aws iam put-role-policy \
-  --role-name AuraFrameDownloaderTaskRole \
-  --policy-name SecretsManagerReadPolicy \
-  --policy-document '{
-    "Version": "2012-10-17",
-    "Statement": [{
-      "Effect": "Allow",
-      "Action": "secretsmanager:GetSecretValue",
-      "Resource": "arn:aws:secretsmanager:us-east-1:123456789012:secret:aura-frame-downloader/credentials-*"
-    }]
-  }'
-```
-
-You also need a separate **Task Execution Role** (for ECS to pull the image and inject secrets):
+Trigger the task immediately rather than waiting for the schedule:
 
 ```bash
-aws iam attach-role-policy \
-  --role-name ecsTaskExecutionRole \
-  --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+CLUSTER=$(aws cloudformation describe-stacks \
+  --stack-name aura-backup \
+  --query "Stacks[0].Outputs[?OutputKey=='ClusterName'].OutputValue" \
+  --output text)
 
-# Add permission to read the secret during container startup
-aws iam put-role-policy \
-  --role-name ecsTaskExecutionRole \
-  --policy-name SecretsManagerForECS \
-  --policy-document '{
-    "Version": "2012-10-17",
-    "Statement": [{
-      "Effect": "Allow",
-      "Action": "secretsmanager:GetSecretValue",
-      "Resource": "arn:aws:secretsmanager:us-east-1:123456789012:secret:aura-frame-downloader/credentials-*"
-    }]
-  }'
-```
+TASK_DEF=$(aws cloudformation describe-stacks \
+  --stack-name aura-backup \
+  --query "Stacks[0].Outputs[?OutputKey=='TaskDefinitionArn'].OutputValue" \
+  --output text)
 
----
-
-## Step 5: Register the ECS Task Definition
-
-Create `task-definition.json` (replace ARNs and frame IDs with your values):
-
-```json
-{
-  "family": "aura-frame-downloader",
-  "networkMode": "awsvpc",
-  "requiresCompatibilities": ["FARGATE"],
-  "cpu": "256",
-  "memory": "512",
-  "taskRoleArn": "arn:aws:iam::123456789012:role/AuraFrameDownloaderTaskRole",
-  "executionRoleArn": "arn:aws:iam::123456789012:role/ecsTaskExecutionRole",
-  "containerDefinitions": [{
-    "name": "aura-backup",
-    "image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/aura-frame-downloader:latest",
-    "essential": true,
-    "environment": [
-      {
-        "name": "S3_BUCKET",
-        "value": "my-aura-backup"
-      },
-      {
-        "name": "AWS_DEFAULT_REGION",
-        "value": "us-east-1"
-      },
-      {
-        "name": "ORGANIZE_BY_YEAR",
-        "value": "true"
-      },
-      {
-        "name": "AURA_FRAMES",
-        "value": "[{\"name\":\"Living Room\",\"frame_id\":\"your-frame-uuid\",\"s3_prefix\":\"living-room\"}]"
-      }
-    ],
-    "secrets": [
-      {
-        "name": "AURA_EMAIL",
-        "valueFrom": "arn:aws:secretsmanager:us-east-1:123456789012:secret:aura-frame-downloader/credentials:AURA_EMAIL::"
-      },
-      {
-        "name": "AURA_PASSWORD",
-        "valueFrom": "arn:aws:secretsmanager:us-east-1:123456789012:secret:aura-frame-downloader/credentials:AURA_PASSWORD::"
-      }
-    ],
-    "logConfiguration": {
-      "logDriver": "awslogs",
-      "options": {
-        "awslogs-group": "/ecs/aura-frame-downloader",
-        "awslogs-region": "us-east-1",
-        "awslogs-stream-prefix": "ecs"
-      }
-    }
-  }]
-}
-```
-
-```bash
-# Create the CloudWatch log group first
-aws logs create-log-group --log-group-name /ecs/aura-frame-downloader
-
-# Register the task definition
-aws ecs register-task-definition --cli-input-json file://task-definition.json
-```
-
----
-
-## Step 6: Create the ECS Cluster
-
-```bash
-aws ecs create-cluster --cluster-name aura-backup-cluster
-```
-
----
-
-## Step 7: Create the EventBridge Scheduled Rule
-
-This triggers the ECS task on a schedule (example: daily at 2 AM UTC).
-
-```bash
-# Create the schedule rule
-aws events put-rule \
-  --name aura-daily-backup \
-  --schedule-expression "cron(0 2 * * ? *)" \
-  --state ENABLED \
-  --description "Daily Aura frame photo backup to S3"
-
-# Grant EventBridge permission to run ECS tasks
-aws iam create-role \
-  --role-name EventBridgeECSRole \
-  --assume-role-policy-document '{
-    "Version": "2012-10-17",
-    "Statement": [{
-      "Effect": "Allow",
-      "Principal": {"Service": "events.amazonaws.com"},
-      "Action": "sts:AssumeRole"
-    }]
-  }'
-
-aws iam put-role-policy \
-  --role-name EventBridgeECSRole \
-  --policy-name RunECSTask \
-  --policy-document '{
-    "Version": "2012-10-17",
-    "Statement": [{
-      "Effect": "Allow",
-      "Action": "ecs:RunTask",
-      "Resource": "arn:aws:ecs:us-east-1:123456789012:task-definition/aura-frame-downloader:*"
-    }, {
-      "Effect": "Allow",
-      "Action": "iam:PassRole",
-      "Resource": [
-        "arn:aws:iam::123456789012:role/AuraFrameDownloaderTaskRole",
-        "arn:aws:iam::123456789012:role/ecsTaskExecutionRole"
-      ]
-    }]
-  }'
-
-# Add the ECS task as the rule target (replace subnet/sg IDs with yours)
-aws events put-targets \
-  --rule aura-daily-backup \
-  --targets '[{
-    "Id": "1",
-    "Arn": "arn:aws:ecs:us-east-1:123456789012:cluster/aura-backup-cluster",
-    "RoleArn": "arn:aws:iam::123456789012:role/EventBridgeECSRole",
-    "EcsParameters": {
-      "TaskDefinitionArn": "arn:aws:ecs:us-east-1:123456789012:task-definition/aura-frame-downloader",
-      "TaskCount": 1,
-      "LaunchType": "FARGATE",
-      "NetworkConfiguration": {
-        "awsvpcConfiguration": {
-          "Subnets": ["subnet-xxxxxxxx"],
-          "AssignPublicIp": "ENABLED"
-        }
-      }
-    }
-  }]'
-```
-
----
-
-## Step 8: Test a Manual Run
-
-Trigger a one-off task run to verify everything works before the schedule fires:
-
-```bash
 aws ecs run-task \
-  --cluster aura-backup-cluster \
-  --task-definition aura-frame-downloader \
+  --cluster "$CLUSTER" \
+  --task-definition "$TASK_DEF" \
   --launch-type FARGATE \
-  --network-configuration 'awsvpcConfiguration={
-    subnets=[subnet-xxxxxxxx],
-    assignPublicIp=ENABLED
-  }'
+  --network-configuration "awsvpcConfiguration={subnets=[subnet-xxxxxxxx],assignPublicIp=ENABLED}"
 ```
 
-Then tail the CloudWatch logs:
+Tail the CloudWatch logs:
 
 ```bash
-aws logs tail /ecs/aura-frame-downloader --follow
+aws logs tail /ecs/aura-backup --follow
 ```
 
-Look for lines like:
+A successful first run ends with:
 ```
-Frame 'Living Room' complete: downloaded=42 skipped=0 total=42
 All frames completed successfully
+Frame 'Living Room' complete: downloaded=N skipped=0 total=N
 ```
 
-On the second run you should see `skipped=42`.
+A subsequent run shows all photos skipped (S3 existence check working):
+```
+Frame 'Living Room' complete: downloaded=0 skipped=N total=N
+```
 
 ---
 
-## Updating the Container Image
+## Updating the container image
+
+Push a new `:latest` image — no stack re-deploy needed.  The next scheduled run
+(or the next manual `aws ecs run-task`) automatically pulls the new image.
 
 ```bash
-docker build -t aura-frame-downloader .
-docker tag aura-frame-downloader:latest \
-  123456789012.dkr.ecr.us-east-1.amazonaws.com/aura-frame-downloader:latest
-docker push \
-  123456789012.dkr.ecr.us-east-1.amazonaws.com/aura-frame-downloader:latest
-
-# Register a new task definition revision
-aws ecs register-task-definition --cli-input-json file://task-definition.json
+docker build --platform linux/amd64 -t "$ECR_URI:latest" .
+docker push "$ECR_URI:latest"
 ```
-
-EventBridge will pick up the latest task definition revision on the next scheduled run.
 
 ---
 
-## Cost Estimate
+## Updating stack parameters
 
-For a daily backup of a typical Aura frame (~500–2000 photos total after the first run):
+To change the schedule, add a frame, or toggle `OrganizeByYear`, re-run
+`aws cloudformation deploy` with the updated `--parameter-overrides`.
+CloudFormation applies a change-set and only modifies affected resources.
+
+---
+
+## Tearing down
+
+```bash
+# Empty the S3 bucket first (CloudFormation won't delete a non-empty bucket)
+aws s3 rm s3://my-aura-backup-YOURNAME --recursive
+
+aws cloudformation delete-stack --stack-name aura-backup
+```
+
+---
+
+## Cost estimate
+
+For a typical Aura frame (~500–2000 photos, daily backup after the first full run):
 
 | Service | Usage | Est. monthly cost |
 |---|---|---|
 | ECS Fargate | ~5 min/day, 0.25 vCPU / 0.5 GB | < $0.10 |
 | S3 storage | ~10 GB photos | ~$0.23 |
-| S3 requests | ~2000 HEAD + few PUTs/day | < $0.01 |
+| S3 requests | ~2 000 HEAD + few PUTs/day | < $0.01 |
 | Secrets Manager | 1 secret | $0.40 |
 | **Total** | | **~$0.75/month** |

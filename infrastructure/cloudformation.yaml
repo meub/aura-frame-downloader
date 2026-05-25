@@ -1,0 +1,347 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Aura Frame Downloader — scheduled ECS Fargate task that backs up Aura digital
+  picture frame photos to S3.  Deploy once, then push :latest to ECR; the next
+  scheduled run picks up the new image automatically.
+
+# =============================================================================
+# Parameters
+# =============================================================================
+
+Parameters:
+
+  AuraEmail:
+    Type: String
+    Description: Aura account email address.
+    NoEcho: true
+
+  AuraPassword:
+    Type: String
+    Description: Aura account password.
+    NoEcho: true
+
+  AuraFrames:
+    Type: String
+    Description: >
+      JSON array of frame objects.  Each object requires: name, frame_id,
+      s3_prefix.  Example:
+      [{"name":"Living Room","frame_id":"abc-123","s3_prefix":"living-room"}]
+
+  BucketName:
+    Type: String
+    Default: aura-frame-backup
+    Description: >
+      Name of the S3 bucket to store photos in.  Must be globally unique —
+      add your account ID or a random suffix if needed.
+
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: >
+      ID of a public VPC subnet for the Fargate task (needs outbound internet
+      access to reach the Aura API and ECR).  A subnet in the default VPC
+      works fine.  Find one with:
+      aws ec2 describe-subnets --filters Name=defaultForAz,Values=true
+        --query 'Subnets[0].SubnetId' --output text
+
+  ScheduleExpression:
+    Type: String
+    Default: 'cron(0 2 * * ? *)'
+    Description: >
+      EventBridge schedule expression.  Default: daily at 02:00 UTC.
+      See https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-cron-expressions.html
+
+  OrganizeByYear:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: >
+      Set to true to group photos into year sub-folders within each S3 prefix.
+
+  CpuArchitecture:
+    Type: String
+    Default: X86_64
+    AllowedValues:
+      - X86_64
+      - ARM64
+    Description: >
+      CPU architecture for the Fargate task — must match the Docker image build
+      platform.  Use ARM64 if building on Apple Silicon (M1/M2/M3); use X86_64
+      for Intel/AMD hosts.
+      Build flag: --platform linux/amd64 (X86_64) or --platform linux/arm64 (ARM64)
+
+# =============================================================================
+# Resources
+# =============================================================================
+
+Resources:
+
+  # ---------------------------------------------------------------------------
+  # S3 — photo storage
+  # ---------------------------------------------------------------------------
+
+  PhotosBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # ---------------------------------------------------------------------------
+  # ECR — container image repository
+  # ---------------------------------------------------------------------------
+
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: aura-frame-downloader
+      LifecyclePolicy:
+        # Keep the 5 most-recent images; expire older ones automatically.
+        LifecyclePolicyText: |
+          {
+            "rules": [{
+              "rulePriority": 1,
+              "description": "Keep last 5 images",
+              "selection": {
+                "tagStatus": "any",
+                "countType": "imageCountMoreThan",
+                "countNumber": 5
+              },
+              "action": { "type": "expire" }
+            }]
+          }
+
+  # ---------------------------------------------------------------------------
+  # CloudWatch Logs
+  # ---------------------------------------------------------------------------
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/aura-backup
+      RetentionInDays: 30
+
+  # ---------------------------------------------------------------------------
+  # Secrets Manager — Aura credentials
+  #
+  # Credentials are stored as a JSON object so individual keys can be injected
+  # into the container as separate environment variables (AURA_EMAIL /
+  # AURA_PASSWORD) without ever appearing in the task definition or logs.
+  # ---------------------------------------------------------------------------
+
+  AuraSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: aura-frame-downloader/credentials
+      Description: Aura account credentials for the frame downloader container
+      SecretString: !Sub '{"AURA_EMAIL":"${AuraEmail}","AURA_PASSWORD":"${AuraPassword}"}'
+
+  # ---------------------------------------------------------------------------
+  # IAM — Task Role
+  # Assumed by the running container; grants S3 write and secret read access.
+  # ---------------------------------------------------------------------------
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AuraFrameDownloaderTaskRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: S3WritePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:HeadObject
+                  - s3:GetObject
+                Resource: !Sub 'arn:aws:s3:::${BucketName}/*'
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !Sub 'arn:aws:s3:::${BucketName}'
+        - PolicyName: SecretsReadPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref AuraSecret
+
+  # ---------------------------------------------------------------------------
+  # IAM — Task Execution Role
+  # Used by ECS to pull the image from ECR and inject secrets at container
+  # startup.  Separate from the Task Role so runtime permissions are minimal.
+  # ---------------------------------------------------------------------------
+
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AuraFrameDownloaderExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: SecretsInjectionPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref AuraSecret
+
+  # ---------------------------------------------------------------------------
+  # ECS — Cluster
+  # ---------------------------------------------------------------------------
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: aura-backup-cluster
+
+  # ---------------------------------------------------------------------------
+  # ECS — Task Definition
+  # ---------------------------------------------------------------------------
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: aura-backup-task
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: '256'    # 0.25 vCPU — sufficient for sequential photo downloads
+      Memory: '512'
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      RuntimePlatform:
+        CpuArchitecture: !Ref CpuArchitecture
+        OperatingSystemFamily: LINUX
+      ContainerDefinitions:
+        - Name: aura-backup
+          # Image URI is derived from the account/region + ECR repo name.
+          # Pushing :latest to ECR is sufficient to update; no stack re-deploy needed.
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepository}:latest'
+          Essential: true
+          Environment:
+            - Name: S3_BUCKET
+              Value: !Ref BucketName
+            - Name: AWS_DEFAULT_REGION
+              Value: !Ref AWS::Region
+            - Name: ORGANIZE_BY_YEAR
+              Value: !Ref OrganizeByYear
+            - Name: AURA_FRAMES
+              Value: !Ref AuraFrames
+          # Credentials are injected from Secrets Manager at container startup.
+          # They are never stored in the task definition or visible in the console.
+          Secrets:
+            - Name: AURA_EMAIL
+              ValueFrom: !Sub '${AuraSecret}:AURA_EMAIL::'
+            - Name: AURA_PASSWORD
+              ValueFrom: !Sub '${AuraSecret}:AURA_PASSWORD::'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  # ---------------------------------------------------------------------------
+  # IAM — Schedule Role
+  # Allows EventBridge to call ecs:RunTask and pass the two task IAM roles.
+  # ---------------------------------------------------------------------------
+
+  ScheduleRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AuraFrameDownloaderScheduleRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: RunECSTaskPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ecs:RunTask
+                Resource: !Ref TaskDefinition
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource:
+                  - !GetAtt TaskRole.Arn
+                  - !GetAtt TaskExecutionRole.Arn
+
+  # ---------------------------------------------------------------------------
+  # EventBridge — Scheduled Rule
+  # ---------------------------------------------------------------------------
+
+  ScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: aura-daily-backup
+      Description: Scheduled Aura frame photo backup to S3
+      ScheduleExpression: !Ref ScheduleExpression
+      State: ENABLED
+      Targets:
+        - Id: AuraBackupECSTarget
+          Arn: !GetAtt ECSCluster.Arn
+          RoleArn: !GetAtt ScheduleRole.Arn
+          EcsParameters:
+            TaskDefinitionArn: !Ref TaskDefinition
+            TaskCount: 1
+            LaunchType: FARGATE
+            NetworkConfiguration:
+              AwsVpcConfiguration:
+                Subnets:
+                  - !Ref SubnetId
+                AssignPublicIp: ENABLED  # Required for public subnet internet access
+
+# =============================================================================
+# Outputs
+# =============================================================================
+
+Outputs:
+
+  ECRRepositoryUri:
+    Description: >
+      ECR repository URI — use this for docker build and docker push.
+    Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepository}'
+
+  BucketName:
+    Description: S3 bucket where photos are stored.
+    Value: !Ref PhotosBucket
+
+  SecretArn:
+    Description: Secrets Manager ARN for the Aura credentials (for rotation setup).
+    Value: !Ref AuraSecret
+
+  ClusterName:
+    Description: ECS cluster name — use for manual aws ecs run-task calls.
+    Value: !Ref ECSCluster
+
+  TaskDefinitionArn:
+    Description: ECS task definition ARN — use for manual aws ecs run-task calls.
+    Value: !Ref TaskDefinition
