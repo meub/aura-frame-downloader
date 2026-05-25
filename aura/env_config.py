@@ -12,11 +12,15 @@ AURA_FRAMES     JSON array of frame objects, each with keys:
                   frame_id  – UUID from the Aura API
                   s3_prefix – S3 key prefix / "folder" for this frame's photos
 S3_BUCKET       Name of the destination S3 bucket.
+                Not required when COUNT_ONLY=true.
 
 Optional variables
 ------------------
 AWS_DEFAULT_REGION   AWS region (default: us-east-1).
 ORGANIZE_BY_YEAR     "true" to group photos in year sub-folders (default: false).
+COUNT_ONLY           "true" to report photo counts only — no downloads, no S3
+                     writes.  Useful as a local smoke test (no AWS credentials
+                     needed).
 
 Example AURA_FRAMES value
 -------------------------
@@ -102,3 +106,14 @@ def load_s3_bucket_from_env() -> str:
 def is_organize_by_year() -> bool:
     """Return True if ORGANIZE_BY_YEAR is set to 'true' (case-insensitive)."""
     return os.environ.get("ORGANIZE_BY_YEAR", "false").lower() == "true"
+
+
+def is_count_only() -> bool:
+    """Return True if COUNT_ONLY is set to 'true' (case-insensitive).
+
+    In count-only mode the container contacts the Aura API to report the
+    number of photos in each frame but does not download anything or write
+    to S3.  S3_BUCKET and AWS credentials are not required, making this
+    ideal for local smoke-testing.
+    """
+    return os.environ.get("COUNT_ONLY", "false").lower() == "true"
