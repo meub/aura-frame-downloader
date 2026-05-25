@@ -51,12 +51,12 @@ aws cloudformation deploy \
   --stack-name aura-backup \
   --capabilities CAPABILITY_NAMED_IAM \
   --parameter-overrides \
-      AuraEmail=you@example.com \
-      AuraPassword=your-password \
+      "AuraEmail=you@example.com" \
+      "AuraPassword=your-password" \
       "AuraFrames=[{\"name\":\"Living Room\",\"frame_id\":\"your-frame-uuid\",\"s3_prefix\":\"living-room\"}]" \
-      BucketName=my-aura-backup-YOURNAME \
-      SubnetId=subnet-xxxxxxxx \
-      CpuArchitecture=X86_64
+      "BucketName=my-aura-backup-YOURNAME" \
+      "SubnetId=subnet-xxxxxxxx" \
+      "CpuArchitecture=X86_64"
 ```
 
 > **Apple Silicon (M1/M2/M3)?** Use `CpuArchitecture=ARM64` — the image and the Fargate
@@ -79,7 +79,7 @@ Optional parameters and their defaults:
 ECR_URI=$(aws cloudformation describe-stacks \
   --stack-name aura-backup \
   --query "Stacks[0].Outputs[?OutputKey=='ECRRepositoryUri'].OutputValue" \
-  --output text)
+  --output text | tr -d '[:space:]')
 
 # Authenticate Docker to ECR
 aws ecr get-login-password \
