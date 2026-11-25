@@ -40,7 +40,7 @@ Aura API, base `https://api.pushd.com/v5`, reverse engineered (there is no publi
 - `GET frames/<id>/assets.json?side_load_users=false` returns every asset in one response. A `limit=1000` parameter used to cap it. A wrong ID returns `{"error": true, "message": "Not found"}`.
 - Photos come from `https://imgproxy.pushd.com/<user_id>/<file_name>`; videos from each asset's `video_url`.
 
-GUI settings use `QSettings("AuraDownloader", "AuraFrameDownloader")`: `~/Library/Preferences/com.auradownloader.AuraFrameDownloader.plist` on macOS, `HKCU\Software\AuraDownloader\AuraFrameDownloader` on Windows. Keys: `email`, `password` (plain text), `manual_frames`, `folders` (per frame id), `selected_frame_id`, and the checkbox flags. The 2.1.x keys `frames` and `selected_frame` are migrated once, then removed.
+GUI settings use `QSettings("AuraDownloader", "AuraFrameDownloader")`: `~/Library/Preferences/com.auradownloader.AuraFrameDownloader.plist` on macOS, `HKCU\Software\AuraDownloader\AuraFrameDownloader` on Windows. Keys: `email`, `password` (plain text; only kept while `remember_password` is true, which is the default), `manual_frames`, `folders` (per frame id), `selected_frame_id`, and the checkbox flags. The 2.1.x keys `frames` and `selected_frame` are migrated once, then removed.
 
 ## Gotchas
 

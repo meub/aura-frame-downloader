@@ -3,6 +3,8 @@
 import json
 import os
 import re
+import time
+from collections import deque
 
 from PyQt6.QtCore import Qt, QSettings, QStandardPaths, QUrl
 from PyQt6.QtGui import QDesktopServices
@@ -29,10 +31,16 @@ from ..core import FRAME_ID_PATTERN, normalize_frame_id
 from .download_worker import LOG_FILE_NAME, DownloadWorker, SignInWorker
 
 FRAME_ID_HELP_URL = "https://github.com/meub/aura-frame-downloader?tab=readme-ov-file#getting-your-frame-id"
+TROUBLESHOOTING_URL = "https://github.com/meub/aura-frame-downloader?tab=readme-ov-file#troubleshooting"
 EXAMPLE_FRAME_ID = "476300c8-98fd-429a-9d33-72a39ca9f1c2"
 
 # Frame names become default folder names; Windows rejects these characters in them.
 INVALID_FOLDER_CHARS = re.compile(r'[<>:"/\\|?*]')
+
+# Time left is estimated from the last this-many photos, so the near-instant skips at the
+# start of a resumed download don't keep the estimate optimistic for long.
+TIME_LEFT_SAMPLES = 20
+TIME_LEFT_MIN_SAMPLES = 5
 
 
 def default_folder_for(frame_name: str) -> str:
@@ -40,6 +48,16 @@ def default_folder_for(frame_name: str) -> str:
     pictures = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.PicturesLocation)
     safe_name = INVALID_FOLDER_CHARS.sub("_", frame_name).strip().rstrip(".") or "Frame"
     return os.path.join(pictures or os.path.expanduser("~"), "Aura", safe_name)
+
+
+def format_time_left(seconds: float) -> str:
+    """Rough remaining time for the status line, e.g. 'about 3 hours left'."""
+    minutes = round(seconds / 60)
+    if minutes < 1:
+        return "less than a minute left"
+    if minutes < 90:
+        return f"about {minutes} minute{'' if minutes == 1 else 's'} left"
+    return f"about {round(seconds / 3600)} hours left"
 
 
 class FrameDialog(QDialog):
@@ -106,6 +124,7 @@ class MainWindow(QMainWindow):
         self.account_frames = []  # From Aura after sign-in: {id, name, num_assets}. Not saved.
         self.manual_frames = []  # Added by ID: {id, name}. Saved.
         self.folders = {}  # Download folder the user chose, per frame id. Saved.
+        self.progress_samples = deque(maxlen=TIME_LEFT_SAMPLES)  # (time, item number) for time left
         self.settings = QSettings("AuraDownloader", "AuraFrameDownloader")
         self._init_ui()
         self._load_settings()
@@ -143,7 +162,12 @@ class MainWindow(QMainWindow):
         sign_in_layout = QHBoxLayout()
         self.sign_in_btn = QPushButton("Sign In")
         self.sign_in_btn.clicked.connect(lambda: self._sign_in(quiet=False))
+        self.remember_password_checkbox = QCheckBox("Remember password")
+        self.remember_password_checkbox.setToolTip(
+            "Saved on this computer without encryption. Uncheck on a computer other people use."
+        )
         sign_in_layout.addWidget(self.sign_in_btn)
+        sign_in_layout.addWidget(self.remember_password_checkbox)
         sign_in_layout.addStretch()
         login_layout.addRow("", sign_in_layout)
 
@@ -231,7 +255,13 @@ class MainWindow(QMainWindow):
     def _load_settings(self):
         """Load saved settings."""
         self.email_input.setText(self.settings.value("email", ""))
-        self.password_input.setText(self.settings.value("password", ""))
+        # On by default so people upgrading from 2.2 and earlier keep being signed in automatically.
+        remember_password = self.settings.value("remember_password", True, type=bool)
+        self.remember_password_checkbox.setChecked(remember_password)
+        if remember_password:
+            self.password_input.setText(self.settings.value("password", ""))
+        # Connected after loading so the initial setChecked doesn't trigger a save.
+        self.remember_password_checkbox.toggled.connect(lambda checked: self._save_settings())
         self.year_checkbox.setChecked(self.settings.value("organize_by_year", False, type=bool))
         self.videos_only_checkbox.setChecked(self.settings.value("videos_only", False, type=bool))
         self.save_assets_checkbox.setChecked(self.settings.value("save_assets", False, type=bool))
@@ -268,7 +298,11 @@ class MainWindow(QMainWindow):
     def _save_settings(self):
         """Save current settings."""
         self.settings.setValue("email", self.email_input.text())
-        self.settings.setValue("password", self.password_input.text())
+        self.settings.setValue("remember_password", self.remember_password_checkbox.isChecked())
+        if self.remember_password_checkbox.isChecked():
+            self.settings.setValue("password", self.password_input.text())
+        else:
+            self.settings.remove("password")
         self.settings.setValue("organize_by_year", self.year_checkbox.isChecked())
         self.settings.setValue("videos_only", self.videos_only_checkbox.isChecked())
         self.settings.setValue("save_assets", self.save_assets_checkbox.isChecked())
@@ -411,7 +445,16 @@ class MainWindow(QMainWindow):
     def _on_sign_in_failed(self, message: str, quiet: bool):
         self.status_label.setText(message)
         if not quiet:
-            QMessageBox.warning(self, "Sign In Failed", message)
+            self._show_error("Sign In Failed", message)
+
+    def _show_error(self, title: str, message: str):
+        """Error dialog with a Help button that opens the README's Troubleshooting section."""
+        box = QMessageBox(QMessageBox.Icon.Warning, title, message, parent=self)
+        help_btn = box.addButton("Help", QMessageBox.ButtonRole.HelpRole)
+        box.addButton(QMessageBox.StandardButton.Ok)
+        box.exec()
+        if box.clickedButton() is help_btn:
+            QDesktopServices.openUrl(QUrl(TROUBLESHOOTING_URL))
 
     def _on_sign_in_finished(self):
         self.sign_in_worker = None
@@ -488,6 +531,7 @@ class MainWindow(QMainWindow):
         self.start_btn.setText("Stop Download")
         self._set_controls_enabled(False)
         self.progress_bar.setValue(0)
+        self.progress_samples.clear()
 
         self.worker.start()
 
@@ -495,6 +539,7 @@ class MainWindow(QMainWindow):
         """Enable or disable input controls."""
         self.email_input.setEnabled(enabled)
         self.password_input.setEnabled(enabled)
+        self.remember_password_checkbox.setEnabled(enabled)
         self.sign_in_btn.setEnabled(enabled and self.sign_in_worker is None)
         self.frame_combo.setEnabled(enabled)
         self.add_frame_btn.setEnabled(enabled)
@@ -518,8 +563,23 @@ class MainWindow(QMainWindow):
         if total > 0:
             percent = int((current / total) * 100)
             self.progress_bar.setValue(percent)
+        # Photo and video of one item report the same number; keep one sample per item.
+        if not self.progress_samples or self.progress_samples[-1][1] != current:
+            self.progress_samples.append((time.monotonic(), current))
         display_name = self._truncate_filename(filename)
-        self.status_label.setText(f"Downloading: {display_name} ({current}/{total})")
+        status = f"Downloading: {display_name} ({current}/{total})"
+        time_left = self._estimate_time_left(total)
+        self.status_label.setText(f"{status}, {time_left}" if time_left else status)
+
+    def _estimate_time_left(self, total: int) -> str:
+        """Time left from the recent rate, or "" until there are enough samples to say."""
+        if len(self.progress_samples) < TIME_LEFT_MIN_SAMPLES:
+            return ""
+        (first_time, first_item), (last_time, last_item) = self.progress_samples[0], self.progress_samples[-1]
+        if last_item <= first_item or last_time <= first_time:
+            return ""
+        seconds_per_item = (last_time - first_time) / (last_item - first_item)
+        return format_time_left((total - last_item) * seconds_per_item)
 
     def _on_status_changed(self, status: str):
         """Handle status change from worker."""
@@ -550,7 +610,7 @@ class MainWindow(QMainWindow):
     def _on_error(self, error_msg: str):
         """Handle error from worker."""
         if "cancelled" not in error_msg.lower():
-            QMessageBox.critical(self, "Error", error_msg)
+            self._show_error("Error", error_msg)
 
     def _on_worker_finished(self):
         """Handle worker thread completion."""

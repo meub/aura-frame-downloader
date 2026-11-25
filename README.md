@@ -97,7 +97,7 @@ In `Pictures/Aura/<frame name>`, unless you chose another folder. Click "Open Fo
 
 ## Your data
 
-Your email, password and settings are saved on your computer so the app can sign in automatically: in `~/Library/Preferences/com.auradownloader.AuraFrameDownloader.plist` on macOS, and in the registry under `HKEY_CURRENT_USER\Software\AuraDownloader\AuraFrameDownloader` on Windows. The password is not encrypted, so avoid saving it on a computer account other people use. Your email and password are only sent to Aura's own server (`api.pushd.com`, the same one the Aura app uses).
+Your email, password and settings are saved on your computer so the app can sign in automatically: in `~/Library/Preferences/com.auradownloader.AuraFrameDownloader.plist` on macOS, and in the registry under `HKEY_CURRENT_USER\Software\AuraDownloader\AuraFrameDownloader` on Windows. The password is not encrypted, so on a computer account other people use, uncheck "Remember password": the saved password is deleted, and the app asks for it each time you open it. Your email and password are only sent to Aura's own server (`api.pushd.com`, the same one the Aura app uses).
 
 ---
 

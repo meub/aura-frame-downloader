@@ -179,12 +179,14 @@ def test_sign_in_failure_at_launch_only_updates_the_status_line(qapp, settings_p
     assert dialogs == []
 
 
-def test_sign_in_failure_after_a_click_shows_a_dialog(qapp, settings_path, account, dialogs):
+def test_sign_in_failure_after_a_click_shows_a_dialog(qapp, settings_path, account, monkeypatch):
     window = signed_in_window(qapp, settings_path, account)
+    errors = []
+    monkeypatch.setattr(window, "_show_error", lambda title, message: errors.append((title, message)))
     account["error"] = NetworkError("Couldn't reach Aura. Check your internet connection and try again.")
     window._sign_in(quiet=False)
     wait_for(qapp, lambda: window.sign_in_worker is None)
-    assert dialogs == [("Sign In Failed", "Couldn't reach Aura. Check your internet connection and try again.")]
+    assert errors == [("Sign In Failed", "Couldn't reach Aura. Check your internet connection and try again.")]
     # The frames from the earlier sign-in stay listed.
     assert [item[1] for item in combo_items(window)] == [FRAME_1, FRAME_3]
 
@@ -193,12 +195,7 @@ def test_completion_dialog_opens_the_download_folder(qapp, settings_path, accoun
     window = signed_in_window(qapp, settings_path, account)
     opened = []
     monkeypatch.setattr(main_window.QDesktopServices, "openUrl", staticmethod(lambda url: opened.append(url.toLocalFile())))
-
-    def click_open_folder(box):
-        next(button for button in box.buttons() if button.text() == "Open Folder").click()
-        return 0
-
-    monkeypatch.setattr(QMessageBox, "exec", click_open_folder)
+    click_button(monkeypatch, "Open Folder")
 
     class FinishedWorker:
         file_path = "/photos/living"
@@ -206,6 +203,84 @@ def test_completion_dialog_opens_the_download_folder(qapp, settings_path, accoun
     window.worker = FinishedWorker()
     window._on_download_complete(10, 2, 0, 12)
     assert opened == ["/photos/living"]
+
+
+def click_button(monkeypatch, text):
+    """Make every QMessageBox click the button labeled `text` instead of waiting for the user."""
+    def click(box):
+        next(button for button in box.buttons() if button.text() == text).click()
+        return 0
+    monkeypatch.setattr(QMessageBox, "exec", click)
+
+
+def test_error_dialog_help_opens_troubleshooting(qapp, settings_path, account, monkeypatch):
+    window = main_window.MainWindow()
+    opened = []
+    monkeypatch.setattr(main_window.QDesktopServices, "openUrl", staticmethod(lambda url: opened.append(url.toString())))
+    click_button(monkeypatch, "Help")
+    window._on_error("Couldn't reach Aura. Check your internet connection and try again.")
+    assert opened == [main_window.TROUBLESHOOTING_URL]
+
+
+def test_cancelling_shows_no_error_dialog(qapp, settings_path, account, monkeypatch):
+    window = main_window.MainWindow()
+    errors = []
+    monkeypatch.setattr(window, "_show_error", lambda title, message: errors.append(message))
+    window._on_error("Download cancelled by user")
+    assert errors == []
+
+
+def test_password_is_remembered_by_default(qapp, settings_path, account):
+    window = signed_in_window(qapp, settings_path, account)
+    assert window.remember_password_checkbox.isChecked()
+    window._save_settings()
+    assert saved(settings_path).value("password") == " pw with spaces "
+
+
+def test_unchecking_remember_password_deletes_it(qapp, settings_path, account):
+    window = signed_in_window(qapp, settings_path, account)
+    window.remember_password_checkbox.setChecked(False)
+    # Takes effect right away, not only when the app closes.
+    assert not saved(settings_path).contains("password")
+    assert saved(settings_path).value("email") == "someone@example.com"
+
+    account["sign_ins"].clear()
+    next_launch = main_window.MainWindow()
+    assert not next_launch.remember_password_checkbox.isChecked()
+    assert next_launch.password_input.text() == ""
+    assert next_launch.sign_in_worker is None and account["sign_ins"] == []
+
+
+@pytest.mark.parametrize("seconds, expected", [
+    (20, "less than a minute left"),
+    (60, "about 1 minute left"),
+    (25 * 60, "about 25 minutes left"),
+    (89 * 60, "about 89 minutes left"),
+    (2.8 * 3600, "about 3 hours left"),
+])
+def test_format_time_left(seconds, expected):
+    assert main_window.format_time_left(seconds) == expected
+
+
+def test_status_line_shows_time_left_from_the_recent_rate(qapp, settings_path, account, monkeypatch):
+    window = main_window.MainWindow()
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(main_window.time, "monotonic", lambda: clock["now"])
+    # A resumed download: 100 photos skipped almost instantly, then 2.5 seconds per photo.
+    for item in range(1, 101):
+        clock["now"] += 0.01
+        window._on_progress_updated(item, 1000, "skipped.jpg")
+    for item in range(101, 131):
+        clock["now"] += 2.5
+        window._on_progress_updated(item, 1000, "photo.jpg")
+    # 870 photos left at 2.5 s each is about 36 minutes; the skips have left the 20-sample window.
+    assert window.status_label.text() == "Downloading: photo.jpg (130/1000), about 36 minutes left"
+
+
+def test_status_line_has_no_estimate_at_first(qapp, settings_path, account):
+    window = main_window.MainWindow()
+    window._on_progress_updated(1, 1000, "photo.jpg")
+    assert window.status_label.text() == "Downloading: photo.jpg (1/1000)"
 
 
 def test_download_worker_writes_a_log_file(qapp, tmp_path, monkeypatch):
