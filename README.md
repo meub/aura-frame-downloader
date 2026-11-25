@@ -44,7 +44,8 @@ Your credentials and settings are saved, and the app signs you in automatically 
 
 ---
 
-## Getting your Frame ID
+<a id="getting-your-frame-id"></a>
+## Getting your Frame ID (only needed for the command line)
 
 The app lists your frames after you sign in, so you only need the Frame ID for the command line, or for a frame that doesn't appear in the app's list (use "Add by ID..."). Pasting the whole address from step 4 also works.
 
