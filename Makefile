@@ -11,6 +11,7 @@ help:
 	@echo "  default      - runs make lint"
 	@echo "  install      - install a new runtime virtual env"
 	@echo "  install-gui  - install GUI dependencies (PyQt6, PyInstaller)"
+	@echo "  test         - run the tests (pytest)"
 	@echo "  lint         - run prospector linter"
 	@echo "  run-gui      - run the GUI application"
 	@echo "  build-mac    - build macOS .app bundle"
@@ -38,6 +39,9 @@ install-packages:
 install-gui:
 	@echo "--> Installing GUI dependencies"
 	./venv/bin/pip install PyQt6>=6.4.0 pyinstaller>=6.0.0
+
+test:
+	./venv/bin/python -m pytest -q
 
 lint:
 	prospector

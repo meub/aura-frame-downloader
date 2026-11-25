@@ -11,6 +11,7 @@ material belongs below.
 make install       # create ./venv (not .venv) from the pyenv default Python, install requirements.txt
 make run-gui       # run the app from source (shares saved settings with the installed app, see Gotchas)
 make build-mac     # dist/Aura Downloader.app
+make test          # pytest, offline and offscreen; must pass before you finish
 ./venv/bin/prospector aura/core.py   # lint; prospector takes one path per run
 ./venv/bin/python download-aura-photos.py --count <frame-section>   # CLI, reads ~/etc/aura/credentials.ini
 ```
@@ -86,8 +87,8 @@ Local builds still work as a fallback: `make build-mac`, then `ditto -c -k --kee
 
 ## Verifying changes
 
-- There is no test suite yet. Write offline checks with fake sessions and responses; never hit the network in tests.
-- GUI: run with `QT_QPA_PLATFORM=offscreen`, patch `main_window.QSettings` to a scratch INI file so the real saved settings aren't touched, and look at `widget.grab().save(...)` screenshots.
+- `make test` runs `tests/` (also run by `build.yml` before building). `conftest.py` fails any test that makes a real HTTP request and skips the download loop's sleeps; `helpers.py` has `make_response` and `FakeSession`. GUI tests run offscreen and point `main_window.QSettings` at a temp INI file (the `settings_path` fixture), so the real saved settings are never touched.
+- For UI changes, also look at the window: `widget.grab().save(...)` offscreen, then view the PNG.
 - Lint: compare prospector output against a `git stash` baseline. The existing warnings (too many arguments/statements, unused `DownloadError`, `unnecessary-pass`) are known.
 - Built Mac app: `Info.plist` version, `codesign --verify --deep`, and an offscreen launch that stays up for a few seconds.
 - Release zips: download them into an empty folder (`gh release download vX.Y.Z -D <dir>`), compare SHA-256 with the previous release, and confirm new code is inside with `CArchiveReader(exe).open_embedded_archive("PYZ.pyz").extract("aura.core", raw=True)`, searching the bytes for an identifier added in this release. For the Mac app, `exe` is `Aura Downloader.app/Contents/MacOS/Aura Downloader`.

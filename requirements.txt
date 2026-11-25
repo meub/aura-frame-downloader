@@ -8,8 +8,13 @@ requests
 # The linter
 prospector
 
+# Tests (tests/, run with python -m pytest); not bundled into the apps
+pytest
+
 # GUI dependencies
-PyQt6>=6.4.0
+# Pinned: PyQt6 6.12.1 bundles a Qt that needs macOS 14.4+, while 6.7.x runs on macOS 11+
+# (measured with vtool on QtCore, 2026-11-25). 6.7.1 is also the last release for Python 3.8.
+PyQt6==6.7.1
 
 # For building standalone executables
 pyinstaller>=6.0.0
