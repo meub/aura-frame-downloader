@@ -1,0 +1,107 @@
+name: Build apps
+
+# Builds the Windows and macOS release zips on GitHub's runners. GitHub doesn't start
+# workflows for draft releases, so run it by hand after creating the draft:
+#   gh workflow run build.yml -f tag=v2.3.0   # build the draft's commit and attach both zips to it
+#   gh workflow run build.yml                 # dry run: build main, keep the zips as run artifacts only
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Draft release tag to attach the zips to (leave empty for a dry run)
+        required: false
+        default: ""
+
+permissions:
+  contents: write  # gh release upload
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            zip: Aura-Downloader-Windows.zip
+            exe: dist/Aura Downloader.exe
+          - os: macos-latest  # Apple Silicon
+            zip: Aura-Downloader-macOS-arm64.zip
+            exe: dist/Aura Downloader.app/Contents/MacOS/Aura Downloader
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        # bash on Windows too: Actions' pwsh wrapper only fails on the last command's exit code.
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Find the commit to build
+        id: commit
+        run: |
+          if [ -n "$TAG" ]; then
+            sha=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json targetCommitish --jq .targetCommitish)
+          else
+            sha="$GITHUB_SHA"
+          fi
+          echo "Building $sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.commit.outputs.sha }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -r requirements.txt
+
+      - name: Build
+        run: pyinstaller aura_gui.spec
+
+      - name: Check the version
+        env:
+          EXE: ${{ matrix.exe }}
+        run: |
+          python - <<'EOF'
+          import os, re, sys
+          from PyInstaller.archive.readers import CArchiveReader
+
+          version = re.search(r'__version__ = "(.+?)"', open("aura/__init__.py", encoding="utf-8").read()).group(1)
+          problems = []
+          if f"'CFBundleShortVersionString': '{version}'" not in open("aura_gui.spec", encoding="utf-8").read():
+              problems.append(f"aura_gui.spec doesn't say {version}")
+          tag = os.environ.get("TAG", "")
+          if tag and tag != f"v{version}":
+              problems.append(f"tag {tag} doesn't match version {version} in aura/__init__.py")
+          bundled = CArchiveReader(os.environ["EXE"]).open_embedded_archive("PYZ.pyz").extract("aura", raw=True)
+          if version.encode() not in bundled:
+              problems.append(f"the built app doesn't contain version {version}")
+          if problems:
+              sys.exit("Version check failed: " + "; ".join(problems))
+          print(f"Built version {version}")
+          EOF
+
+      - name: Zip (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path "dist\Aura Downloader.exe" -DestinationPath "dist\${{ matrix.zip }}"
+
+      - name: Zip (macOS)
+        if: runner.os == 'macOS'
+        working-directory: dist
+        run: ditto -c -k --keepParent "Aura Downloader.app" "${{ matrix.zip }}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.zip }}
+          path: dist/${{ matrix.zip }}
+          if-no-files-found: error
+
+      - name: Attach to the draft release
+        if: inputs.tag != ''
+        run: gh release upload "$TAG" "dist/${{ matrix.zip }}" --clobber --repo "$GITHUB_REPOSITORY"
