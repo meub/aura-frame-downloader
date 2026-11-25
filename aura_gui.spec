@@ -73,8 +73,8 @@ if sys.platform == 'darwin':
         info_plist={
             'CFBundleName': 'Aura Downloader',
             'CFBundleDisplayName': 'Aura Downloader',
-            'CFBundleVersion': '2.1.1',
-            'CFBundleShortVersionString': '2.1.1',
+            'CFBundleVersion': '2.2.0',
+            'CFBundleShortVersionString': '2.2.0',
             'NSHighResolutionCapable': True,
         },
     )
