@@ -11,9 +11,11 @@ from typing import Callable, Dict, List, Optional, Tuple
 import requests
 
 from .exceptions import (
+    AuraError,
     DownloadCancelledError,
     DownloadError,
     LoginError,
+    NetworkError,
     NoAssetsError,
 )
 
@@ -21,11 +23,16 @@ LOGGER = logging.getLogger(__name__)
 
 # API URLs
 LOGIN_URL = "https://api.pushd.com/v5/login.json"
+FRAMES_URL = "https://api.pushd.com/v5/frames.json"
 FRAME_URL_TEMPLATE = "https://api.pushd.com/v5/frames/{frame_id}/assets.json?side_load_users=false"
 IMAGE_URL_TEMPLATE = "https://imgproxy.pushd.com/{user_id}/{file_name}"
 
 # Without a timeout a stalled connection left the GUI stuck on "Logging in..." for good.
 REQUEST_TIMEOUT_SECONDS = 90
+
+# Stop after this many photos in a row fail to connect. Each failure waits 10 seconds, so
+# without a limit a dropped connection kept "downloading" 5,000 photos for about 14 hours.
+MAX_CONSECUTIVE_NETWORK_FAILURES = 5
 
 # Frame IDs are UUIDs. Users often paste the whole app.auraframes.com/frame/<id> URL instead.
 FRAME_ID_PATTERN = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE)
@@ -35,6 +42,15 @@ def normalize_frame_id(raw: str) -> str:
     """Return the frame UUID found in raw (a bare ID or a pasted URL), else raw stripped."""
     match = FRAME_ID_PATTERN.search(raw)
     return match.group(0) if match else raw.strip()
+
+
+def _api_request(session: requests.Session, method: str, url: str, **kwargs) -> requests.Response:
+    """Send an API request, turning connection failures into a NetworkError users can act on."""
+    try:
+        return session.request(method, url, timeout=REQUEST_TIMEOUT_SECONDS, **kwargs)
+    except (requests.ConnectionError, requests.Timeout) as exc:
+        # Previously shown raw, e.g. "Unexpected error: HTTPSConnectionPool(host='api.pushd.com'...".
+        raise NetworkError("Couldn't reach Aura. Check your internet connection and try again.") from exc
 
 
 def create_session(email: str, password: str) -> requests.Session:
@@ -63,7 +79,7 @@ def create_session(email: str, password: str) -> requests.Session:
     }
 
     session = requests.Session()
-    response = session.post(LOGIN_URL, json=login_payload, timeout=REQUEST_TIMEOUT_SECONDS)
+    response = _api_request(session, "POST", LOGIN_URL, json=login_payload)
 
     if response.status_code != 200:
         # A wrong email/password comes back as HTTP 475 with a JSON "message" (checked 2026-11-24).
@@ -82,6 +98,33 @@ def create_session(email: str, password: str) -> requests.Session:
 
     LOGGER.info("Login successful")
     return session
+
+
+def get_frames(session: requests.Session) -> List[Dict]:
+    """
+    List the frames this account can see, including frames shared with it.
+
+    Args:
+        session: Authenticated requests.Session
+
+    Returns:
+        List of dicts with 'id', 'name' and 'num_assets' (photo count, may be None)
+
+    Raises:
+        AuraError: If the API response isn't a frame list
+    """
+    response = _api_request(session, "GET", FRAMES_URL)
+    try:
+        frames = response.json()["frames"]
+        return [
+            {'id': f['id'], 'name': f.get('name') or "Unnamed frame", 'num_assets': f.get('num_assets')}
+            for f in frames
+        ]
+    except (ValueError, KeyError, TypeError) as exc:
+        LOGGER.error("Unexpected frame list response (HTTP %s): %.200s", response.status_code, response.text)
+        raise AuraError(
+            f"Aura returned an unexpected response (HTTP {response.status_code}) when listing frames."
+        ) from exc
 
 
 def get_frame_assets(
@@ -104,7 +147,7 @@ def get_frame_assets(
         NoAssetsError: If no assets are found or API returns error
     """
     frame_url = FRAME_URL_TEMPLATE.format(frame_id=normalize_frame_id(frame_id))
-    response = session.get(frame_url, timeout=REQUEST_TIMEOUT_SECONDS)
+    response = _api_request(session, "GET", frame_url)
     try:
         json_data = response.json()
     except ValueError as exc:
@@ -195,6 +238,7 @@ def download_photos_from_aura(
     downloaded_count = 0
     skipped_count = 0
     failed_count = 0
+    consecutive_network_failures = 0
     current = 0
 
     for item in assets:
@@ -261,6 +305,7 @@ def download_photos_from_aura(
                 del response
 
                 downloaded_count += 1
+                consecutive_network_failures = 0
 
                 time.sleep(2)
 
@@ -269,6 +314,16 @@ def download_photos_from_aura(
         except Exception as e:
             LOGGER.error("Item %i failed to download: %s", current, str(e))
             failed_count += 1
+            if isinstance(e, (requests.ConnectionError, requests.Timeout)):
+                consecutive_network_failures += 1
+                if consecutive_network_failures >= MAX_CONSECUTIVE_NETWORK_FAILURES:
+                    raise NetworkError(
+                        "Lost the connection to Aura. Check your internet connection, then start "
+                        "the download again to continue where it stopped."
+                    ) from e
+            else:
+                # Any other failure (e.g. a 404 for one photo) means the server answered.
+                consecutive_network_failures = 0
             time.sleep(10)
 
     return (downloaded_count, skipped_count, failed_count, total_count)

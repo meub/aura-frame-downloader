@@ -16,6 +16,11 @@ class LoginError(AuraError):
     pass
 
 
+class NetworkError(AuraError):
+    """Raised when Aura's servers can't be reached (no connection, DNS failure, timeout)."""
+    pass
+
+
 class NoAssetsError(AuraError):
     """Raised when no assets are found in the frame."""
     pass
