@@ -15,6 +15,15 @@ function Write-Status($message) {
     Write-Host "--> $message" -ForegroundColor Cyan
 }
 
+# Native commands (python, pip, pyinstaller) don't stop the script under
+# $ErrorActionPreference = "Stop", so check each one's exit code.
+function Assert-LastExit($step) {
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Error: $step failed (exit code $LASTEXITCODE)" -ForegroundColor Red
+        exit 1
+    }
+}
+
 function Install-Venv {
     Write-Status "Creating Python virtual environment"
 
@@ -24,12 +33,15 @@ function Install-Venv {
     }
 
     python -m venv venv
+    Assert-LastExit "Creating the venv"
 
     Write-Status "Upgrading pip"
     .\venv\Scripts\python.exe -m pip install --upgrade pip setuptools wheel
+    Assert-LastExit "Upgrading pip"
 
     Write-Status "Installing dependencies"
     .\venv\Scripts\pip.exe install -r requirements.txt
+    Assert-LastExit "Installing dependencies"
 
     Write-Status "Virtual environment ready"
 }
@@ -42,7 +54,12 @@ function Build-App {
         exit 1
     }
 
+    # Delete the old exe first. Otherwise a failed build leaves it in place and the check
+    # below reports success (2.1.1's first Windows upload was the stale 2.1.0 exe).
+    if (Test-Path ".\dist\Aura Downloader.exe") { Remove-Item -Force ".\dist\Aura Downloader.exe" }
+
     .\venv\Scripts\pyinstaller.exe aura_gui.spec
+    Assert-LastExit "PyInstaller"
 
     if (Test-Path ".\dist\Aura Downloader.exe") {
         Write-Status "Build complete: dist\Aura Downloader.exe"
