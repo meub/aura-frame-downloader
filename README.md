@@ -1,6 +1,6 @@
 # Aura Frame Downloader
 
-Bulk download photos from your Aura digital picture frame (auraframes.com). Aura provides no easy way to bulk download photos, so this tool lets you download all your photos at once. Since Aura stores photos on their servers, no physical access to the frame is needed.
+Bulk download photos and videos from your Aura digital picture frame (auraframes.com). Aura provides no easy way to bulk download photos, so this tool lets you download all your photos at once. Since Aura stores photos on their servers, no physical access to the frame is needed.
 
 ---
 
@@ -28,7 +28,7 @@ Your credentials and settings are saved, and the app signs you in automatically 
 
 ### Windows
 
-1. **Download** the latest release: [Aura-Downloader-Windows.zip](https://github.com/meub/aura-frame-downloader/releases/latest)
+1. **Download** the latest release: [Aura-Downloader-Windows.zip](https://github.com/meub/aura-frame-downloader/releases/latest/download/Aura-Downloader-Windows.zip)
 
 2. **Unzip** and run `Aura Downloader.exe`
    - Windows may show a SmartScreen warning since the app isn't signed
@@ -55,18 +55,66 @@ The app lists your frames after you sign in, so you only need the Frame ID for t
 
 ---
 
+## Troubleshooting
+
+### "Login failed: The email or password was incorrect."
+
+Use the same email and password you use to sign in to the Aura app.
+
+### "Couldn't reach Aura. Check your internet connection and try again."
+
+The app couldn't connect to Aura's servers. Check that you're online. On a work network or VPN, try another network.
+
+### "Lost the connection to Aura..."
+
+The connection dropped during a download. Photos that finished are kept. Click "Start Download" again and it continues where it stopped.
+
+### My frame isn't in the list
+
+The list shows every frame on the Aura account you signed in with, including frames other people shared with you. Check that you signed in with the right account. You can also add a frame with "Add by ID..." (see [Getting your Frame ID](#getting-your-frame-id)).
+
+### "Aura could not load this frame" or "Check that the Frame ID is correct"
+
+This usually happens with a frame added by ID: the ID is wrong, or the account you signed in with can't see that frame. Pick the frame from the list instead, or check the ID.
+
+### "Download Finished With Errors"
+
+Some photos didn't download. Click "Start Download" again to retry them. Photos that already downloaded are skipped. Details are in `aura-downloader.log` in the download folder.
+
+### How long does it take?
+
+The app waits about 2 seconds between photos so Aura doesn't block it, so 5,000 photos take around 3 hours. You can stop and restart at any time without downloading anything twice.
+
+### Where are my photos?
+
+In `Pictures/Aura/<frame name>`, unless you chose another folder. Click "Open Folder" when the download finishes.
+
+### Reporting a problem
+
+[Open an issue](https://github.com/meub/aura-frame-downloader/issues) with the version you downloaded, your operating system, the exact error message, and the `aura-downloader.log` file from your download folder. Never post your password.
+
+---
+
+## Your data
+
+Your email, password and settings are saved on your computer so the app can sign in automatically: in `~/Library/Preferences/com.auradownloader.AuraFrameDownloader.plist` on macOS, and in the registry under `HKEY_CURRENT_USER\Software\AuraDownloader\AuraFrameDownloader` on Windows. The password is not encrypted, so avoid saving it on a computer account other people use. Your email and password are only sent to Aura's own server (`api.pushd.com`, the same one the Aura app uses).
+
+---
+
 ## Command Line Usage
 
-If you prefer the command line or are on Windows/Linux:
+If you prefer the command line, or you're on Linux:
 
 ### Setup
 
-1. Install Python 3 and the requests module:
+1. Download this repository (green "Code" button, then "Download ZIP") or clone it, and open a terminal in that folder.
+
+2. Install Python 3 and the requests module:
    ```bash
    pip install requests
    ```
 
-2. Create a configuration file at:
+3. Create a configuration file at:
    - **Windows:** `%USERPROFILE%/etc/aura/credentials.ini`
    - **Mac/Linux:** `$HOME/etc/aura/credentials.ini`
 
@@ -84,6 +132,8 @@ If you prefer the command line or are on Windows/Linux:
    file_path = ./images-another-frame
    frame_id = b69ddd8d-bcad-483f-adf4-e15ff9a48c47
    ```
+
+   `frame_id` can be the ID or the frame's full `app.auraframes.com` address (see [Getting your Frame ID](#getting-your-frame-id)).
 
 ### Commands
 
@@ -153,6 +203,8 @@ make lint
 
 See `make help` for all available commands.
 
+`make run-gui` uses the same saved settings as the installed app, so running a newer version from source also updates the installed app's settings.
+
 ### Windows (PowerShell)
 
 ```powershell
@@ -166,4 +218,4 @@ See `make help` for all available commands.
 .\build_windows.ps1 -Clean      # Remove build artifacts
 ```
 
-The built executable will be at `dist\Aura Downloader.exe`.
+The built executable will be at `dist\Aura Downloader.exe`. Use `-Clean -All` for release builds so a failed build can't leave the previous exe behind, and close Aura Downloader first: Windows can't replace the exe while it's running ("Cannot remove item").
