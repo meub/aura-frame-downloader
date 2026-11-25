@@ -6,7 +6,7 @@ from typing import Optional
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from ..core import download_photos_from_aura
+from ..core import create_session, download_photos_from_aura, get_frames
 from ..exceptions import (
     AuraError,
     DownloadCancelledError,
@@ -18,6 +18,29 @@ LOGGER = logging.getLogger(__name__)
 
 # The packaged app has no console, so each run's log is written here in the download folder.
 LOG_FILE_NAME = "aura-downloader.log"
+
+
+class SignInWorker(QThread):
+    """QThread worker that signs in and fetches the account's frames."""
+
+    frames_loaded = pyqtSignal(list)  # list of {id, name, num_assets}
+    failed = pyqtSignal(str)  # error message
+
+    def __init__(self, email: str, password: str, parent=None):
+        super().__init__(parent)
+        self.email = email
+        self.password = password
+
+    def run(self):
+        """Sign in and emit the frame list."""
+        try:
+            session = create_session(self.email, self.password)
+            self.frames_loaded.emit(get_frames(session))
+        except AuraError as e:
+            self.failed.emit(str(e))
+        except Exception as e:
+            LOGGER.exception("Unexpected error while signing in")
+            self.failed.emit(f"Unexpected error: {str(e)}")
 
 
 class DownloadWorker(QThread):

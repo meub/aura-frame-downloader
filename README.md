@@ -19,12 +19,12 @@ Bulk download photos from your Aura digital picture frame (auraframes.com). Aura
      ```
 
 4. **Use the app:**
-   - Enter your Aura email and password
-   - Click "Add Frame" and enter your frame details (see [Getting your Frame ID](#getting-your-frame-id) below)
-   - Select a download folder
+   - Enter your Aura email and password, then click "Sign In"
+   - Pick your frame from the list (frames shared with you are included)
+   - Photos are saved to `Pictures/Aura/<frame name>` unless you choose another folder
    - Click "Start Download"
 
-Your credentials and frame settings are saved automatically for next time.
+Your credentials and settings are saved, and the app signs you in automatically next time.
 
 ### Windows
 
@@ -35,16 +35,18 @@ Your credentials and frame settings are saved automatically for next time.
    - Click "More info" then "Run anyway"
 
 3. **Use the app:**
-   - Enter your Aura email and password
-   - Click "Add Frame" and enter your frame details (see [Getting your Frame ID](#getting-your-frame-id) below)
-   - Select a download folder
+   - Enter your Aura email and password, then click "Sign In"
+   - Pick your frame from the list (frames shared with you are included)
+   - Photos are saved to `Pictures/Aura/<frame name>` unless you choose another folder
    - Click "Start Download"
 
-Your credentials and frame settings are saved automatically for next time.
+Your credentials and settings are saved, and the app signs you in automatically next time.
 
 ---
 
 ## Getting your Frame ID
+
+The app lists your frames after you sign in, so you only need the Frame ID for the command line, or for a frame that doesn't appear in the app's list (use "Add by ID..."). Pasting the whole address from step 4 also works.
 
 1. Go to https://app.auraframes.com and log in
 2. Click on the Frame name
