@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import re
 import shutil
 import time
 from typing import Callable, Dict, List, Optional, Tuple
@@ -22,6 +23,18 @@ LOGGER = logging.getLogger(__name__)
 LOGIN_URL = "https://api.pushd.com/v5/login.json"
 FRAME_URL_TEMPLATE = "https://api.pushd.com/v5/frames/{frame_id}/assets.json?side_load_users=false"
 IMAGE_URL_TEMPLATE = "https://imgproxy.pushd.com/{user_id}/{file_name}"
+
+# Without a timeout a stalled connection left the GUI stuck on "Logging in..." for good.
+REQUEST_TIMEOUT_SECONDS = 90
+
+# Frame IDs are UUIDs. Users often paste the whole app.auraframes.com/frame/<id> URL instead.
+FRAME_ID_PATTERN = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE)
+
+
+def normalize_frame_id(raw: str) -> str:
+    """Return the frame UUID found in raw (a bare ID or a pasted URL), else raw stripped."""
+    match = FRAME_ID_PATTERN.search(raw)
+    return match.group(0) if match else raw.strip()
 
 
 def create_session(email: str, password: str) -> requests.Session:
@@ -50,10 +63,16 @@ def create_session(email: str, password: str) -> requests.Session:
     }
 
     session = requests.Session()
-    response = session.post(LOGIN_URL, json=login_payload)
+    response = session.post(LOGIN_URL, json=login_payload, timeout=REQUEST_TIMEOUT_SECONDS)
 
     if response.status_code != 200:
-        raise LoginError("Login failed: Check your credentials")
+        # A wrong email/password comes back as HTTP 475 with a JSON "message" (checked 2026-11-24).
+        # A response without one (e.g. a 5xx page) points at an Aura outage, not bad credentials.
+        try:
+            message = response.json()["message"]
+        except (ValueError, KeyError, TypeError):
+            message = f"HTTP {response.status_code}. Aura may be having problems, try again later."
+        raise LoginError(f"Login failed: {message}")
 
     json_data = response.json()
     session.headers.update({
@@ -84,9 +103,19 @@ def get_frame_assets(
     Raises:
         NoAssetsError: If no assets are found or API returns error
     """
-    frame_url = FRAME_URL_TEMPLATE.format(frame_id=frame_id)
-    response = session.get(frame_url)
-    json_data = json.loads(response.text)
+    frame_url = FRAME_URL_TEMPLATE.format(frame_id=normalize_frame_id(frame_id))
+    response = session.get(frame_url, timeout=REQUEST_TIMEOUT_SECONDS)
+    try:
+        json_data = response.json()
+    except ValueError as exc:
+        # A frame ID containing "/" misses the API's routes and gets an HTML 404 page back,
+        # which surfaced as "Expecting value: line 1 column 1 (char 0)". Probed 2026-11-24.
+        LOGGER.error("Non-JSON response (HTTP %s) from %s: %.200s",
+                     response.status_code, frame_url, response.text)
+        raise NoAssetsError(
+            f"Aura returned an unexpected response (HTTP {response.status_code}). "
+            "Check that the Frame ID is correct."
+        ) from exc
 
     if save_raw_response_path:
         with open(save_raw_response_path, 'w') as f:
@@ -96,6 +125,13 @@ def get_frame_assets(
     if "assets" not in json_data:
         LOGGER.error("No images returned from this Aura Frame. API responded with:")
         LOGGER.error(json_data)
+        if json_data.get("error"):
+            # A wrong Frame ID answers {"error": true, "message": "Not found"}, which used to
+            # be reported as an empty frame (issue #22).
+            raise NoAssetsError(
+                f"Aura could not load this frame: {json_data.get('message')} "
+                f"(HTTP {response.status_code}). Check that the Frame ID is correct."
+            )
         raise NoAssetsError("No images found in this Aura Frame")
 
     return json_data["assets"]
@@ -112,7 +148,7 @@ def download_photos_from_aura(
     save_assets_path: Optional[str] = None,
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
-) -> Tuple[int, int, int]:
+) -> Tuple[int, int, int, int]:
     """
     Download photos from an Aura frame.
 
@@ -129,7 +165,8 @@ def download_photos_from_aura(
         cancel_check: Optional callback() that returns True if download should be cancelled
 
     Returns:
-        Tuple of (downloaded_count, skipped_count, total_count)
+        Tuple of (downloaded_count, skipped_count, failed_count, total_count).
+        Downloaded and skipped count files; failed and total count assets.
 
     Raises:
         LoginError: If authentication fails
@@ -146,7 +183,7 @@ def download_photos_from_aura(
     LOGGER.info("Found %s photos", total_count)
 
     if count_only:
-        return (0, 0, total_count)
+        return (0, 0, 0, total_count)
 
     # Ensure output directory exists
     if not os.path.isdir(file_path):
@@ -157,6 +194,7 @@ def download_photos_from_aura(
 
     downloaded_count = 0
     skipped_count = 0
+    failed_count = 0
     current = 0
 
     for item in assets:
@@ -209,10 +247,17 @@ def download_photos_from_aura(
                     continue
 
                 LOGGER.info("%i: Downloading %s %s", current, label, basename)
-                response = requests.get(url, stream=True, timeout=90)
+                response = requests.get(url, stream=True, timeout=REQUEST_TIMEOUT_SECONDS)
+                # Without this an error body (imgproxy sends a 27-byte text/plain 404) was saved
+                # as the photo, and later runs skipped it as already downloaded.
+                response.raise_for_status()
 
-                with open(file_to_write, 'wb') as out_file:
+                # Write to .part and rename when complete, so an interrupted download never
+                # leaves a truncated file that later runs would skip.
+                part_file = file_to_write + ".part"
+                with open(part_file, 'wb') as out_file:
                     shutil.copyfileobj(response.raw, out_file)
+                os.replace(part_file, file_to_write)
                 del response
 
                 downloaded_count += 1
@@ -223,6 +268,7 @@ def download_photos_from_aura(
             raise
         except Exception as e:
             LOGGER.error("Item %i failed to download: %s", current, str(e))
+            failed_count += 1
             time.sleep(10)
 
-    return (downloaded_count, skipped_count, total_count)
+    return (downloaded_count, skipped_count, failed_count, total_count)

@@ -25,7 +25,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox,
 )
 
-from .download_worker import DownloadWorker
+from .download_worker import LOG_FILE_NAME, DownloadWorker
 
 
 class FrameDialog(QDialog):
@@ -341,7 +341,7 @@ class MainWindow(QMainWindow):
     def _start_download(self):
         """Start the download process."""
         email = self.email_input.text().strip()
-        password = self.password_input.text().strip()
+        password = self.password_input.text()  # not stripped: spaces can be part of a password
 
         if not email or not password:
             QMessageBox.warning(self, "Missing Credentials", "Please enter your email and password.")
@@ -442,14 +442,19 @@ class MainWindow(QMainWindow):
         """Handle status change from worker."""
         self.status_label.setText(status)
 
-    def _on_download_complete(self, downloaded: int, skipped: int, total: int):
+    def _on_download_complete(self, downloaded: int, skipped: int, failed: int, total: int):
         """Handle download completion."""
         self.progress_bar.setValue(100)
-        QMessageBox.information(
-            self,
-            "Download Complete",
-            f"Downloaded: {downloaded}\nSkipped: {skipped}\nTotal: {total}"
-        )
+        summary = f"Downloaded: {downloaded}\nSkipped: {skipped}\nFailed: {failed}\nTotal: {total}"
+        if failed:
+            QMessageBox.warning(
+                self,
+                "Download Finished With Errors",
+                f"{summary}\n\nClick Start Download again to retry the failed items. "
+                f"Details are in {LOG_FILE_NAME} in the download folder."
+            )
+        else:
+            QMessageBox.information(self, "Download Complete", summary)
 
     def _on_error(self, error_msg: str):
         """Handle error from worker."""

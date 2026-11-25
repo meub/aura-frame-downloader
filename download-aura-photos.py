@@ -114,7 +114,7 @@ def app():
 
     # Run the download
     try:
-        downloaded, skipped, total = download_photos_from_aura(
+        downloaded, skipped, failed, total = download_photos_from_aura(
             email=email,
             password=password,
             frame_id=frame_id,
@@ -129,6 +129,8 @@ def app():
             LOGGER.info("Total photos in frame: %d", total)
         else:
             LOGGER.info("Downloaded %d photos (%d skipped)", downloaded, skipped)
+            if failed:
+                LOGGER.warning("%d items failed to download. Run again to retry them.", failed)
 
     except LoginError as e:
         LOGGER.error(str(e))

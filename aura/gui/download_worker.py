@@ -1,5 +1,9 @@
 """Background worker thread for downloading photos."""
 
+import logging
+import os
+from typing import Optional
+
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from ..core import download_photos_from_aura
@@ -10,6 +14,11 @@ from ..exceptions import (
     NoAssetsError,
 )
 
+LOGGER = logging.getLogger(__name__)
+
+# The packaged app has no console, so each run's log is written here in the download folder.
+LOG_FILE_NAME = "aura-downloader.log"
+
 
 class DownloadWorker(QThread):
     """QThread worker for downloading photos in the background."""
@@ -17,7 +26,7 @@ class DownloadWorker(QThread):
     # Signals
     progress_updated = pyqtSignal(int, int, str)  # current, total, filename
     status_changed = pyqtSignal(str)  # status message
-    download_complete = pyqtSignal(int, int, int)  # downloaded, skipped, total
+    download_complete = pyqtSignal(int, int, int, int)  # downloaded, skipped, failed, total
     error_occurred = pyqtSignal(str)  # error message
 
     def __init__(
@@ -53,12 +62,27 @@ class DownloadWorker(QThread):
         """Emit progress signal."""
         self.progress_updated.emit(current, total, filename)
 
+    def _start_log_file(self) -> Optional[logging.FileHandler]:
+        """Send this run's log to LOG_FILE_NAME in the download folder; None if it can't be written."""
+        try:
+            handler = logging.FileHandler(
+                os.path.join(self.file_path, LOG_FILE_NAME), mode='w', encoding='utf-8'
+            )
+        except OSError:
+            return None
+        handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+        aura_logger = logging.getLogger("aura")
+        aura_logger.setLevel(logging.INFO)
+        aura_logger.addHandler(handler)
+        return handler
+
     def run(self):
         """Execute the download in the background thread."""
+        log_handler = self._start_log_file()
         try:
             self.status_changed.emit("Logging in...")
 
-            downloaded, skipped, total = download_photos_from_aura(
+            downloaded, skipped, failed, total = download_photos_from_aura(
                 email=self.email,
                 password=self.password,
                 frame_id=self.frame_id,
@@ -72,7 +96,7 @@ class DownloadWorker(QThread):
             )
 
             self.status_changed.emit("Download complete")
-            self.download_complete.emit(downloaded, skipped, total)
+            self.download_complete.emit(downloaded, skipped, failed, total)
 
         except DownloadCancelledError:
             self.status_changed.emit("Download cancelled")
@@ -91,5 +115,11 @@ class DownloadWorker(QThread):
             self.error_occurred.emit(str(e))
 
         except Exception as e:
+            LOGGER.exception("Unexpected error")
             self.status_changed.emit("Error")
             self.error_occurred.emit(f"Unexpected error: {str(e)}")
+
+        finally:
+            if log_handler:
+                logging.getLogger("aura").removeHandler(log_handler)
+                log_handler.close()
